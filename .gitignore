@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.log
+.env
+*.db
+*.db-journal
+prisma/dev.db*
+web/node_modules/
+web/dist/
+.DS_Store
+
+# local editor/agent config
+.claude/

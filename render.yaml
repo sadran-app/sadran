@@ -1,0 +1,18 @@
+# Render Blueprint — one service (API + web) built from the Dockerfile.
+# In Render: New → Blueprint → pick this repo. Then set DATABASE_URL (the Neon
+# string) in the dashboard. JWT_SECRET is generated automatically.
+services:
+  - type: web
+    name: sadran
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # paste the Neon connection string in the dashboard
+      - key: JWT_SECRET
+        generateValue: true # Render creates a strong random secret
+      - key: NODE_ENV
+        value: production

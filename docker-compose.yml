@@ -1,0 +1,17 @@
+# Local Postgres for development. Run:  docker compose up -d
+# Then your .env DATABASE_URL matches the service below out of the box.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sadran
+    ports:
+      - '5432:5432'
+    volumes:
+      - sadran_pg:/var/lib/postgresql/data
+
+volumes:
+  sadran_pg:

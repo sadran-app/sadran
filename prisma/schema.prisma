@@ -1,0 +1,189 @@
+// Sadran — Prisma schema (SQLite for MVP; designed to move to Postgres cleanly).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String        @id @default(cuid())
+  name        String
+  timezone    String        @default("Asia/Jerusalem")
+  laborRules  String // JSON: { minRestHours, maxWeeklyHours, minorCurfewHour }
+  // automation: when + what to auto-send employees to collect availability
+  autoMessage String        @default("היי {שם}, נא לשלוח את הימים שבהם תוכל/י לעבוד בשבוע הקרוב 🙏")
+  autoSendDay Int           @default(0) // day of week to send (0 = Sunday)
+  autoSendTime String       @default("09:00") // 'HH:MM'
+  managers    Manager[]
+  roles       Role[]
+  employees   Employee[]
+  shifts      Shift[]
+  cycles      WeekCycle[]
+}
+
+// A branch manager's login. We create these accounts; no self-signup.
+// Each manager is scoped to exactly one organization (their restaurant).
+model Manager {
+  id           String        @id @default(cuid())
+  orgId        String? // null for the platform admin (belongs to no business)
+  org          Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  email        String        @unique
+  passwordHash String
+  name         String
+  isAdmin      Boolean       @default(false) // platform owner — the only one who can open businesses
+  createdAt    DateTime      @default(now())
+}
+
+model Role {
+  id          String         @id @default(cuid())
+  orgId       String
+  org         Organization   @relation(fields: [orgId], references: [id])
+  name        String // מלצר / טבח / ברמן
+  employees   EmployeeRole[]
+  slots       ShiftSlot[]
+  assignments Assignment[]
+}
+
+model Employee {
+  id             String         @id @default(cuid())
+  orgId          String
+  org            Organization   @relation(fields: [orgId], references: [id])
+  name           String
+  phone          String
+  email          String?
+  minShifts      Int            @default(0)
+  maxShifts      Int            @default(6)
+  isMinor        Boolean        @default(false)
+  birthDate      DateTime?
+  hourlyRate     Float          @default(0) // ₪ לשעה — לחישוב עלות שכר בדוחות
+  active         Boolean        @default(true)
+  optInStatus    String         @default("pending") // pending | opted_in | opted_out
+  fairnessCredit Float          @default(0) // מצטבר בין מחזורים
+  createdAt      DateTime       @default(now())
+  roles          EmployeeRole[]
+  availability   Availability[]
+  assignments    Assignment[]
+  fairnessLogs   FairnessLog[]
+}
+
+// many-to-many מפורש: קל לשאול "מי מוסמך לתפקיד X" ב-swap eligibility
+model EmployeeRole {
+  employeeId String
+  roleId     String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([employeeId, roleId])
+}
+
+// A named segment on ONE specific weekday (e.g. Sunday "בוקר" ending 16:00).
+// Fully manager-defined: any day, any hours, any label.
+model Shift {
+  id           String         @id @default(cuid())
+  orgId        String
+  org          Organization   @relation(fields: [orgId], references: [id])
+  dayIndex     Int // 0–6 (0 = Sunday)
+  label        String // "בוקר" / "ערב" / "צהריים"...
+  startTime    String // earliest start 'HH:MM' (informational / grid header)
+  endTime      String // when the segment ends 'HH:MM' (rest + curfew basis)
+  order        Int
+  colorTier    Int            @default(0)
+  slots        ShiftSlot[]
+  availability Availability[]
+  assignments  Assignment[]
+}
+
+// A staffing requirement inside a shift: N of a role starting at a given time.
+// Its work interval is [startTime .. parent shift endTime].
+model ShiftSlot {
+  id          String       @id @default(cuid())
+  shiftId     String
+  shift       Shift        @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  roleId      String
+  role        Role         @relation(fields: [roleId], references: [id])
+  startTime   String // 'HH:MM' when this group arrives
+  count       Int
+  assignments Assignment[]
+}
+
+model WeekCycle {
+  id            String         @id @default(cuid())
+  orgId         String
+  org           Organization   @relation(fields: [orgId], references: [id])
+  weekStartDate DateTime
+  status        String         @default("collecting") // collecting | proposed | published
+  availability  Availability[]
+  assignments   Assignment[]
+  swapRequests  SwapRequest[]
+  fairnessLogs  FairnessLog[]
+}
+
+model Availability {
+  id         String    @id @default(cuid())
+  cycleId    String
+  cycle      WeekCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shiftId    String
+  shift      Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  state      String // 'ok' | 'prefer' | 'cant'
+
+  @@unique([cycleId, employeeId, shiftId])
+}
+
+model Assignment {
+  id           String        @id @default(cuid())
+  cycleId      String
+  cycle        WeekCycle     @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee      @relation(fields: [employeeId], references: [id])
+  shiftId      String
+  shift        Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  slotId       String
+  slot         ShiftSlot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  roleId       String
+  role         Role          @relation(fields: [roleId], references: [id])
+  startTime    String // 'HH:MM' (copied from slot for convenience)
+  status       String        @default("proposed") // proposed | published | vacated
+  swapRequests SwapRequest[]
+
+  // an employee can fill a given requirement at most once — makes duplicate
+  // inserts (e.g. a double-clicked "generate") physically impossible
+  @@unique([cycleId, slotId, employeeId])
+}
+
+model SwapRequest {
+  id           String     @id @default(cuid())
+  cycleId      String
+  cycle        WeekCycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignmentId    String
+  assignment      Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  status          String     @default("open") // open | claimed | approved | rejected
+  previousHolderId String?   // מי הפיל את המשמרת (לדוחות)
+  claimedById     String?
+  approvedById    String?
+  createdAt       DateTime   @default(now())
+}
+
+model FairnessLog {
+  id              String    @id @default(cuid())
+  cycleId         String
+  cycle           WeekCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  undesirableLoad Float // משקל סופ״ש / סגירה
+  count           Int
+}
+
+// MockChannel כותב לכאן (Wizard-of-Oz): נותן יעד persistent ל-"נשלח לעובד"
+model OutboxMessage {
+  id         String   @id @default(cuid())
+  employeeId String
+  channel    String   @default("mock")
+  kind       String // availability_request | schedule | open_shift | notify
+  body       String
+  createdAt  DateTime @default(now())
+}

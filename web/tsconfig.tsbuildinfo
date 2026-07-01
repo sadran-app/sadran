@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/lib/api.ts","./src/lib/ilfields.tsx","./src/pages/adminpage.tsx","./src/pages/availabilitypage.tsx","./src/pages/historypage.tsx","./src/pages/loginpage.tsx","./src/pages/reportspage.tsx","./src/pages/schedulepage.tsx","./src/pages/settingspage.tsx","./src/pages/swapspage.tsx"],"version":"5.9.3"}
