@@ -156,9 +156,11 @@ describe('generateSchedule invariants', () => {
     expect(result.assignments.some((a) => a.employeeId === 'c' && eveningShiftIds.has(a.shiftId))).toBe(false);
   });
 
-  it('never exceeds maxShifts', () => {
+  it('never exceeds maxShifts for non-forced assignments', () => {
+    // maxShifts is a PREFERENCE the engine may relax when force-filling, so we only
+    // assert it for the normally-eligible (non-forced) assignments.
     for (const e of input.employees) {
-      const count = result.assignments.filter((a) => a.employeeId === e.id).length;
+      const count = result.assignments.filter((a) => a.employeeId === e.id && !a.forced).length;
       expect(count).toBeLessThanOrEqual(e.maxShifts);
     }
   });
@@ -172,8 +174,56 @@ describe('generateSchedule invariants', () => {
     }
   });
 
-  it('produces gaps when evenings outstrip non-minor staff', () => {
-    expect(result.gaps.length).toBeGreaterThan(0);
-    expect(result.warnings.length).toBeGreaterThan(0);
+  it('force-fills short-staffed seats instead of leaving gaps — without breaking a law', () => {
+    // 14 seats but only A+B can staff evenings (C is a minor → curfew). Their
+    // maxShifts=3 is a preference, so the engine force-fills the overflow.
+    expect(result.assignments.some((a) => a.forced)).toBe(true);
+    // a minor is STILL never placed on a post-curfew evening, even under force
+    const eveningShiftIds = new Set(input.shifts.filter((s) => s.endTime === '23:30').map((s) => s.id));
+    expect(result.assignments.some((a) => a.employeeId === 'c' && eveningShiftIds.has(a.shiftId))).toBe(false);
+  });
+
+  it('leaves a LEGAL gap when a post-curfew seat can only be filled by a minor', () => {
+    const minorOnly: ScheduleInput = {
+      weekendDays: [5, 6],
+      laborRules: rules,
+      shifts: [{ id: 'e0', dayIndex: 0, label: 'ערב', startTime: '18:00', endTime: '23:30', order: 0, colorTier: 0 }],
+      demand: [{ id: 'de0', shiftId: 'e0', roleId: 'waiter', startTime: '18:00', count: 1 }],
+      employees: [emp({ id: 'm', name: 'Minor', isMinor: true })],
+      availability: [],
+    };
+    const r = generateSchedule(minorOnly);
+    expect(r.gaps.length).toBeGreaterThan(0); // curfew is a LAW → cannot force-fill
+    expect(r.assignments.length).toBe(0);
+    // the gap explains WHY it couldn't be filled (actionable for the manager)
+    expect(r.gaps[0]!.reason).toContain('עוצר');
+  });
+
+  it('labels a gap "no such role" when nobody has the required role', () => {
+    const noRole: ScheduleInput = {
+      weekendDays: [5, 6], laborRules: rules,
+      shifts: [{ id: 'k0', dayIndex: 0, label: 'בוקר', startTime: '08:00', endTime: '16:00', order: 0, colorTier: 0 }],
+      demand: [{ id: 'dk', shiftId: 'k0', roleId: 'chef', startTime: '08:00', count: 1 }],
+      employees: [emp({ id: 'w', name: 'Waiter' })], // has 'waiter', not 'chef'
+      availability: [],
+    };
+    const r = generateSchedule(noRole);
+    expect(r.gaps.length).toBe(1);
+    expect(r.gaps[0]!.reason).toContain('התפקיד');
+  });
+
+  it('brings an employee up to their minShifts when seats allow', () => {
+    const minFill: ScheduleInput = {
+      weekendDays: [5, 6], laborRules: rules,
+      shifts: [0, 1, 2].map((d) => ({ id: 'd' + d, dayIndex: d, label: 'בוקר', startTime: '08:00', endTime: '16:00', order: 0, colorTier: 0 })),
+      demand: [0, 1, 2].map((d) => ({ id: 'x' + d, shiftId: 'd' + d, roleId: 'waiter', startTime: '08:00', count: 1 })),
+      employees: [
+        emp({ id: 'wants', name: 'Wants', minShifts: 2, maxShifts: 3 }),
+        emp({ id: 'flex', name: 'Flex', minShifts: 0, maxShifts: 3 }),
+      ],
+      availability: [],
+    };
+    const r = generateSchedule(minFill);
+    expect(r.assignments.filter((a) => a.employeeId === 'wants').length).toBeGreaterThanOrEqual(2);
   });
 });

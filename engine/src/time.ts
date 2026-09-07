@@ -7,6 +7,13 @@ export function toMinutes(hhmm: string): number {
   return Number(h) * 60 + Number(m);
 }
 
+/** Inverse of toMinutes for an intra-day value → 'HH:MM' (wraps at 24h). */
+export function fromMinutes(mins: number): string {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 /** Shift length in minutes; if end <= start we assume it crosses midnight. */
 export function shiftDuration(start: string, end: string): number {
   const s = toMinutes(start);

@@ -9,5 +9,14 @@ web/node_modules/
 web/dist/
 .DS_Store
 
+# python solver (OR-Tools) — venv is machine-local, recreate from requirements.txt
+solver/.venv/
+solver/__pycache__/
+**/__pycache__/
+
 # local editor/agent config
 .claude/
+
+# runtime WhatsApp inbound log (contains phone numbers — never commit)
+wa-inbound.jsonl
+*.jsonl

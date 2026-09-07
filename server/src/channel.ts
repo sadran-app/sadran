@@ -1,6 +1,15 @@
-import { MockChannel } from '@channel';
+import { MockChannel, WhatsAppCloudChannel } from '@channel';
 import { prisma } from './db';
 
-// The one place the channel is chosen. Swap MockChannel → WhatsAppCloudChannel
-// here (and nowhere else) when the real integration is ready.
-export const channel = new MockChannel(prisma);
+// Channel is chosen by env vars — this is the ONLY place it's decided.
+// With WhatsApp creds set (locally, for testing) → real WhatsApp.
+// Without them (e.g. production on Render) → the safe Mock/Outbox channel.
+const token = process.env.WHATSAPP_TOKEN;
+const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+export const channel =
+  token && phoneNumberId
+    ? new WhatsAppCloudChannel(prisma, { token, phoneNumberId, testRecipient: process.env.WHATSAPP_TEST_RECIPIENT })
+    : new MockChannel(prisma);
+
+console.log(`[channel] ${token && phoneNumberId ? 'WhatsApp Cloud API' : 'Mock (Outbox)'}`);

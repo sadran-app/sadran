@@ -13,6 +13,8 @@ export interface LaborRules {
 
 export type ViolationCode =
   | 'role' // lacks the required role
+  | 'time_off' // approved vacation / reserve duty on this day — hard, never force-filled
+  | 'level' // has the role but below the seat's required seniority level
   | 'availability' // marked "cant" for this shift
   | 'max_shifts' // reached their weekly shift cap
   | 'same_shift' // already assigned to this exact shift
@@ -20,7 +22,8 @@ export type ViolationCode =
   | 'rest' // not enough rest before/after an adjacent shift
   | 'curfew' // minor: shift ends after curfew
   | 'max_daily_hours' // would exceed daily hours cap
-  | 'max_weekly_hours'; // would exceed weekly hours cap
+  | 'max_weekly_hours' // would exceed weekly hours cap
+  | 'max_consecutive'; // would exceed the employee's max consecutive worked days
 
 export interface Violation {
   code: ViolationCode;
@@ -51,16 +54,33 @@ export interface EngineDemandSlot {
   roleId: string;
   startTime: string; // 'HH:MM'
   count: number;
+  minLevel?: number; // required seniority (default 1) — 3.3
+}
+
+// A day on which an employee can work only a bounded window (free-hours). Absent =
+// fully available that day. Used to clip an assignment to the hours they can work.
+export interface DayWindow {
+  dayIndex: number; // 0–6
+  fromTime: string; // 'HH:MM'
+  toTime: string; // 'HH:MM'
 }
 
 export interface EngineEmployee {
   id: string;
   name: string;
   roleIds: string[];
+  roleLevels?: Record<string, number>; // roleId -> seniority level (default 1) — 3.3
+  maxConsecutiveDays?: number | null; // cap on consecutive worked days (undefined/null = no cap) — 3.3
+  blockedDays?: number[]; // approved time-off weekdays (0–6) — hard, never scheduled/forced — 3.1
   minShifts: number;
   maxShifts: number;
   isMinor: boolean;
   fairnessCredit: number;
+  dayWindows?: DayWindow[]; // free-hours limits; absent/empty = available all day
+  // true when we have NO availability info for this employee this cycle (no WhatsApp
+  // reply, not configured). They are NOT treated as available — only force-fillable,
+  // and as the last resort (after employees who did submit availability).
+  availabilityUnknown?: boolean;
 }
 
 export interface EngineAvailability {
@@ -76,6 +96,9 @@ export interface ScheduleInput {
   demand: EngineDemandSlot[];
   employees: EngineEmployee[];
   availability: EngineAvailability[];
+  // Manager-pinned assignments to keep fixed. They are seeded before the greedy
+  // fill (counted toward coverage, load, rest/hours limits) and never moved.
+  preAssigned?: EngineAssignment[];
 }
 
 // A single unit of demand (one seat to fill).
@@ -86,6 +109,7 @@ export interface Slot {
   roleId: string;
   startTime: string;
   endTime: string;
+  minLevel?: number; // required seniority (default 1) — 3.3
 }
 
 export interface EngineAssignment {
@@ -96,6 +120,14 @@ export interface EngineAssignment {
   dayIndex: number;
   startTime: string;
   endTime: string;
+  // Set when the seat could not be filled by a normally-eligible employee and the
+  // engine force-filled it (relaxing ONLY preferences — availability / max shifts —
+  // never a labor-law rule). Needs manager approval; shown in strong red.
+  forced?: boolean;
+  forceReason?: string; // Hebrew explanation: what was overridden + why this person
+  overrides?: ViolationCode[]; // which soft constraints were relaxed
+  partial?: boolean; // the worked interval was clipped to the employee's free-hours window
+  locked?: boolean; // manager-pinned — seeded as a fixed pre-assignment, never moved by any pass
 }
 
 export interface Gap {
@@ -104,7 +136,9 @@ export interface Gap {
   slotId: string;
   roleId: string;
   startTime: string;
+  endTime?: string; // when the uncovered hole is only part of the seat's interval
   missing: number;
+  reason?: string; // Hebrew explanation of WHY it couldn't be filled (actionable)
 }
 
 export interface FairnessResult {

@@ -1,73 +1,82 @@
-# סַדְרָן — Sadran
+# Sadran
 
-פלטפורמת ניהול סידור משמרות. **Milestone 1**: ליבת התכנון + מנוע החלפות, ממשק מנהל RTL, ו-MockChannel (Wizard-of-Oz).
+A shift-scheduling management platform. Milestone 1: scheduling core plus swap engine, an RTL manager interface, and a MockChannel (Wizard of Oz).
 
-## מבנה
+## Structure
 
 ```
-prisma/    schema + seed (מסעדה עם ~20 עובדים, פערי סופ״ש מכוונים)
-engine/    מנוע התכנון — pure TS, unit-tested (@engine)
-channel/   ChannelAdapter + MockChannel + WhatsAppCloud stub (@channel)
+prisma/    schema and seed (a restaurant with ~20 employees and intentional weekend gaps)
+engine/    the scheduling engine, pure TS, unit-tested (@engine)
+channel/   ChannelAdapter, MockChannel, and a WhatsAppCloud stub (@channel)
 server/    Fastify API
-web/        React + Vite + Tailwind (RTL)
+web/       React, Vite, Tailwind (RTL)
 ```
 
-## הרצה מקומית (PostgreSQL)
+## Local run (PostgreSQL)
 
-צריך `DATABASE_URL` של Postgres. הכי מהיר — DB חינמי מנוהל (Neon / Supabase), או Postgres מקומי דרך Docker:
+You need a Postgres `DATABASE_URL`. Fastest is a free managed database (Neon or Supabase), or a local Postgres via Docker:
 
 ```bash
-docker compose up -d        # מריץ Postgres מקומי (תואם ל-DATABASE_URL שב-.env)
+docker compose up -d        # runs a local Postgres matching DATABASE_URL in .env
 ```
 
-ואז:
+Then:
+
 ```bash
-cp .env.example .env        # מלא DATABASE_URL, JWT_SECRET
-npm run setup               # install + generate + migrate + seed (מסעדת דמו)
-npm run dev                 # server :3001 + web :5173
+cp .env.example .env        # fill in DATABASE_URL and JWT_SECRET
+npm run setup               # install, generate, migrate, and seed the demo restaurant
+npm run dev                 # server on 3001 and web on 5173
 ```
 
-בנפרד:
+Separately:
+
 ```bash
-npm run db:reset            # מוחק, מריץ migrations, וזורע מחדש
-npm test                    # unit tests למנוע
+npm run db:reset            # drops, re-runs migrations, and reseeds
+npm test                    # engine unit tests
 ```
 
-## פריסה לענן (שירות יחיד)
+## Cloud deploy (single service)
 
-בפרודקשן השרת מגיש **גם את ה-API וגם את ה-web** מאותו origin — פריסה של שירות אחד. עובד ישירות על Render / Railway / Fly / כל מארח שתומך ב-Docker או Node.
+In production the server serves both the API and the web app from the same origin, so it is a single-service deploy. It works directly on Render, Railway, Fly, or any host that supports Docker or Node.
 
-**משתני סביבה נדרשים:** `DATABASE_URL` (Postgres), `JWT_SECRET` (מחרוזת אקראית ארוכה), `NODE_ENV=production`, `PORT` (רוב המארחים מזריקים אוטומטית).
+Required environment variables: `DATABASE_URL` (Postgres), `JWT_SECRET` (a long random string), `NODE_ENV=production`, and `PORT` (most hosts inject this automatically).
 
-**Build:** `npm run build`  ·  **Start:** `npm start` (מריץ `prisma migrate deploy` ואז את השרת).
+Build: `npm run build`. Start: `npm start` (runs `prisma migrate deploy` and then the server).
 
-או עם Docker:
+Or with Docker:
+
 ```bash
 docker build -t sadran .
 docker run -e DATABASE_URL=... -e JWT_SECRET=... -p 3001:3001 sadran
 ```
 
-**אחרי הפריסה הראשונה** — צור את חשבון מנהל-העל (בלי נתוני דמו):
+After the first deploy, create the super-admin account (no demo data):
+
 ```bash
 ADMIN_EMAIL=you@x.com ADMIN_PASSWORD=... npm run bootstrap:admin
 ```
 
-## התחברות (רב-דיירות)
-כל מנהל מתחבר לחשבון ייעודי ורואה **רק את המסעדה שלו**. חשבון דמו:
+## Login (multi-tenant)
+
+Each manager logs into a dedicated account and sees only their own restaurant. Demo account:
+
 ```
 manager@hanamal.co.il / demo1234
 ```
-כל בקשת API מוגנת ב-JWT ומשויכת לארגון של המנהל.
 
-## הזרימה
-1. **הגדרות** — חוקי עבודה + **עורך משמרות גמיש לכל יום**: מגדירים לכל יום בנפרד משמרות (מקטעים) עם שעות משלהן, ובתוך כל משמרת כמה עובדים מכל תפקיד ומאיזו שעה (למשל ראשון: 06:00 טבח×2, 07:00 מלצר×3, 10:00 מלצר×2; וב-16:00 משמרת ערב נפרדת).
-2. **עובדים** — הוספת עובד (שם/טלפון/תאריך לידה/שכר/תפקידים) → צירוף אוטומטי לוואטסאפ (הודעת פתיחה + בקשת זמינות ל-Outbox); עריכת זמינות (ok/prefer/cant) ו-min/max; קטין מזוהה אוטומטית מגיל.
-3. **דוחות** — לוח מחוונים למנהל: משמרות, שעות, **עלות שכר**, כיסוי, סופ״ש/סגירות, החלפות (הפיל/כיסה), קטינים, חוסרים — מצטבר לאורך כל השבועות.
-4. **סידור** — "צור סידור" → גריד wave-based, פערים מודגשים, עריכה ידנית, "פרסם".
-5. **החלפות** — "נפל ממשמרת" (↔ על תא) → שידור לזכאים → claim → אישור מנהל → reassign + fairness + notify.
+Every API request is protected by JWT and scoped to the manager's organization.
 
-כל התקשורת עוברת דרך `MockChannel` שכותב ל-`OutboxMessage` (נראה במסך החלפות) ולקונסול.
+## The flow
 
-## החלפה ל-OR-Tools / WhatsApp אמיתי
-- המנוע מאחורי `generateSchedule(input)` — אותו חוזה, אפשר להחליף מימוש בלי לגעת ב-callers.
-- הערוץ נבחר במקום אחד: `server/src/channel.ts`. החלף `MockChannel` ב-`WhatsAppCloudChannel`.
+1. Settings: labor rules plus a flexible per-day shift editor. For each day you define shifts (segments) with their own hours, and inside each shift how many employees of each role and from what time (for example Sunday: 06:00 cook x2, 07:00 waiter x3, 10:00 waiter x2, and a separate 16:00 evening shift).
+2. Employees: add an employee (name, phone, birth date, pay, roles), which auto-enrolls them to WhatsApp (a welcome message plus an availability request to the Outbox). Edit availability (ok, prefer, cant) and min/max. A minor is detected automatically from age.
+3. Reports: a manager dashboard with shifts, hours, labor cost, coverage, weekends and closings, swaps (dropped and covered), minors, and gaps, aggregated across all weeks.
+4. Schedule: "Generate schedule" produces a wave-based grid with highlighted gaps, manual editing, and "Publish".
+5. Swaps: "drop a shift" broadcasts to eligible employees, then claim, then manager approval, then reassign plus fairness plus notify.
+
+All communication goes through `MockChannel`, which writes to `OutboxMessage` (visible on the swaps screen) and to the console.
+
+## Swapping in OR-Tools or real WhatsApp
+
+- The engine sits behind `generateSchedule(input)`. Same contract, so you can swap the implementation without touching callers.
+- The channel is chosen in one place: `server/src/channel.ts`. Replace `MockChannel` with `WhatsAppCloudChannel`.

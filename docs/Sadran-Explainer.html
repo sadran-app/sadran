@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>סַדְרָן — סרטון הסברה מלא</title>
+<style>
+  :root{
+    --bg:#0b1220; --bg2:#0f172a; --ink:#e2e8f0; --muted:#94a3b8; --faint:#64748b;
+    --brand:#0d9488; --emer:#059669; --mint:#34d399; --amber:#f59e0b; --red:#f43f5e; --violet:#8b5cf6; --sky:#0ea5e9;
+    --card:#111c31; --line:#1e293b;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Segoe UI","Arial",sans-serif; background:radial-gradient(1200px 700px at 80% -10%, #12324a 0%, var(--bg) 55%) , var(--bg);
+    color:var(--ink); overflow:hidden; -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0; display:flex; align-items:center; justify-content:center}
+  .scene{position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
+    padding:6vh 8vw 16vh; opacity:0; transform:translateY(18px); pointer-events:none;
+    transition:opacity .6s ease, transform .6s ease}
+  .scene.active{opacity:1; transform:none; pointer-events:auto}
+  .kicker{display:inline-block; align-self:flex-start; background:var(--brand); color:#fff; font-weight:700;
+    font-size:clamp(12px,1.5vw,17px); padding:6px 16px; border-radius:999px; margin-bottom:18px; letter-spacing:.2px}
+  h1{font-size:clamp(30px,5.2vw,68px); line-height:1.08; font-weight:800; margin-bottom:10px}
+  h1 .accent{color:var(--mint)}
+  .sub{font-size:clamp(15px,2vw,24px); color:var(--muted); max-width:60ch; line-height:1.5; margin-bottom:26px}
+  .points{display:flex; flex-direction:column; gap:12px; max-width:70ch}
+  .pt{display:flex; align-items:flex-start; gap:14px; background:linear-gradient(90deg, rgba(255,255,255,.04), transparent);
+    border:1px solid var(--line); border-radius:14px; padding:14px 18px; opacity:0; transform:translateX(24px);
+    transition:opacity .5s ease, transform .5s ease}
+  .scene.active .pt{opacity:1; transform:none}
+  .scene.active .pt:nth-child(1){transition-delay:.15s}
+  .scene.active .pt:nth-child(2){transition-delay:.35s}
+  .scene.active .pt:nth-child(3){transition-delay:.55s}
+  .scene.active .pt:nth-child(4){transition-delay:.75s}
+  .scene.active .pt:nth-child(5){transition-delay:.95s}
+  .dot{flex:0 0 auto; width:34px; height:34px; border-radius:10px; display:grid; place-items:center;
+    font-weight:800; font-size:16px; color:#fff}
+  .pt b{font-size:clamp(15px,1.9vw,21px); font-weight:700}
+  .pt span{color:var(--muted); font-size:clamp(13px,1.55vw,17px)}
+  .pt .txt{display:flex; flex-direction:column; gap:2px}
+  /* title scene */
+  .logo{width:96px;height:96px;border-radius:24px;background:linear-gradient(135deg,var(--brand),var(--emer));
+    display:grid;place-items:center;font-size:56px;font-weight:800;color:#fff;margin-bottom:26px;box-shadow:0 20px 60px rgba(13,148,136,.35)}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px;max-width:80ch}
+  .chip{border:1px solid var(--brand);background:rgba(13,148,136,.12);color:#cbd5e1;border-radius:999px;
+    padding:8px 16px;font-size:clamp(12px,1.4vw,16px)}
+  .glow1,.glow2{position:fixed;border-radius:50%;filter:blur(50px);opacity:.5;z-index:-1}
+  .glow1{width:420px;height:420px;background:var(--brand);top:-120px;left:-80px}
+  .glow2{width:360px;height:360px;background:var(--emer);bottom:-120px;right:-60px}
+  /* caption / controls */
+  #cap{position:fixed;left:0;right:0;bottom:74px;display:flex;justify-content:center;padding:0 6vw;pointer-events:none}
+  #cap .box{background:rgba(2,6,14,.72);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:14px;
+    padding:12px 22px;max-width:80ch;text-align:center;font-size:clamp(15px,1.9vw,21px);line-height:1.5;color:#f1f5f9}
+  #bar{position:fixed;left:0;right:0;bottom:64px;height:3px;background:rgba(255,255,255,.08)}
+  #bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brand),var(--mint));transition:width .3s linear}
+  #ctl{position:fixed;left:0;right:0;bottom:0;height:60px;display:flex;align-items:center;justify-content:center;gap:8px;
+    background:rgba(2,6,14,.6);backdrop-filter:blur(8px);border-top:1px solid var(--line)}
+  #ctl button{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;
+    padding:8px 14px;font-size:14px;cursor:pointer;font-family:inherit;transition:.15s}
+  #ctl button:hover{background:rgba(255,255,255,.08);border-color:var(--brand)}
+  #ctl .idx{color:var(--faint);font-size:13px;min-width:64px;text-align:center}
+  #ctl .title{position:absolute;right:16px;color:var(--faint);font-size:13px;font-weight:700}
+  #start{position:fixed;inset:0;background:rgba(3,7,15,.92);z-index:10;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;text-align:center;padding:0 8vw}
+  #start h2{font-size:clamp(24px,4vw,44px);font-weight:800}
+  #start p{color:var(--muted);max-width:56ch;font-size:clamp(14px,1.8vw,19px);line-height:1.6}
+  #start button{margin-top:10px;background:linear-gradient(135deg,var(--brand),var(--emer));color:#fff;border:none;
+    border-radius:14px;padding:16px 40px;font-size:20px;font-weight:800;cursor:pointer;font-family:inherit;
+    box-shadow:0 16px 40px rgba(13,148,136,.4)}
+  #start small{color:var(--faint);font-size:13px;max-width:52ch;line-height:1.5}
+  .num{position:absolute;top:6vh;left:8vw;font-size:14px;color:var(--faint);font-weight:700;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="glow1"></div><div class="glow2"></div>
+<div id="stage"></div>
+
+<div id="cap"><div class="box" id="capText"></div></div>
+<div id="bar"><i id="barFill"></i></div>
+<div id="ctl">
+  <span class="title">סַדְרָן · סרטון הסברה</span>
+  <button id="prev">‹ הקודם</button>
+  <button id="play">⏸ הפסק</button>
+  <button id="next">הבא ›</button>
+  <button id="replay">↻ מהתחלה</button>
+  <button id="mute">🔊 קול</button>
+  <span class="idx" id="idx"></span>
+</div>
+
+<div id="start">
+  <div class="logo" style="width:110px;height:110px;font-size:64px">ס</div>
+  <h2>סַדְרָן — סרטון הסברה מלא</h2>
+  <p>סיור מודרך בכל הפיצ'רים של המערכת, עם קריינות בעברית. הסרטון מתקדם לבד בין הסצנות. אפשר לעצור, לדלג ולחזור בכל רגע.</p>
+  <button id="go">▶ התחל את הסרטון</button>
+  <small>הקריינות עובדת בדפדפני Chrome / Edge (קול עברי מובנה). אם אין קול — הכתוביות והמעבר האוטומטי ימשיכו לפי תזמון. מומלץ מסך מלא (F11).</small>
+</div>
+
+<script>
+const C={brand:"#0d9488",emer:"#059669",mint:"#34d399",amber:"#f59e0b",red:"#f43f5e",violet:"#8b5cf6",sky:"#0ea5e9",muted:"#94a3b8"};
+const P=(color,label,head,body)=>({color,label,head,body});
+
+// ---- scenes ----
+const scenes=[
+{type:"title",
+ narration:"ברוכים הבאים לסַדְרָן — מערכת שיבוץ המשמרות החכמה למסעדות, שמנוהלת כולה דרך וואטסאפ. בסרטון הזה נעבור על כל הפיצ'רים של המערכת, מסך אחר מסך, כדי שתכירו אותה לעומק ותוכלו לתפעל אותה בביטחון מלא."},
+
+{kicker:"סקירה כללית", title:'מה זה <span class="accent">סַדְרָן</span>?',
+ sub:"מהמשמרות בפנקס — לסידור עבודה חכם, הוגן ולפי חוק, בלחיצה אחת.",
+ points:[
+  P(C.brand,"1","חוסך שעות בכל שבוע","המערכת אוספת זמינות ובונה סידור מלא — אתם רק מאשרים ומפרסמים"),
+  P(C.emer,"2","הוגן ולפי חוק","מאזן עומס בין העובדים ולעולם לא חורג מחוקי העבודה"),
+  P(C.violet,"3","הכול בוואטסאפ","העובדים לא צריכים אפליקציה — הכול קורה בהודעות רגילות"),
+ ],
+ narration:"אז מה זה סַדְרָן? זו מערכת שמנהלת את כל מחזור השיבוץ השבועי של המסעדה. היא אוספת מהעובדים את הזמינות שלהם ישירות בוואטסאפ, בונה אוטומטית סידור עבודה מאוזן שמכבד את חוקי העבודה, ומאפשרת פרסום, מעקב, החלפות ודוחות — הכול במקום אחד ובעברית מלאה. המערכת חוסכת לכם שעות בכל שבוע, דואגת שהסידור יהיה הוגן ולפי חוק, והכי חשוב — העובדים לא צריכים שום אפליקציה, הכול קורה בוואטסאפ."},
+
+{kicker:"תהליך העבודה", title:"מחזור שבועי — מקצה לקצה",
+ sub:"כל שבוע מתנהל בארבעה שלבים פשוטים.",
+ points:[
+  P(C.brand,"1","איסוף זמינות","בקשה נשלחת לכל העובדים בוואטסאפ — ידני או אוטומטי"),
+  P(C.emer,"2","יצירת סידור","לחיצה אחת, והמנוע משבץ לפי זמינות, הוגנות וחוק"),
+  P(C.violet,"3","בדיקה ופרסום","מסדרים אם צריך, ומפרסמים לכל העובדים"),
+  P(C.amber,"4","מעקב והחלפות","עוקבים, מטפלים בהחלפות, והסידור נשמר בהיסטוריה"),
+ ],
+ narration:"העבודה עם המערכת מתנהלת בארבעה שלבים חוזרים בכל שבוע. שלב ראשון — איסוף זמינות: המערכת שולחת לכל העובדים בקשת זמינות בוואטסאפ, ידנית או אוטומטית. שלב שני — יצירת סידור: בלחיצה אחת המנוע משבץ את כולם לפי הזמינות, ההוגנות וחוקי העבודה. שלב שלישי — בדיקה ופרסום: אתם עוברים על הסידור, מתקנים ידנית אם צריך, ומפרסמים. ושלב רביעי — מעקב והחלפות: עוקבים אחרי מי הגיב, מטפלים בהחלפות משמרת, ובסוף הסידור נשמר בארכיון. חשוב לדעת — אפשר לפתוח את השבוע הבא רק אחרי שהנוכחי פורסם, כך שתמיד יש סידור פעיל אחד וברור."},
+
+{kicker:"מפת המסך", title:"שמונה לשוניות — כל המערכת",
+ sub:"כל אזור עבודה במערכת נמצא בלשונית משלו.",
+ points:[
+  P(C.brand,"◧","סידור · עובדים · מעקב · צ׳אט","לוח השיבוץ, ניהול הצוות, מעקב חי ותיבת וואטסאפ"),
+  P(C.amber,"◨","היסטוריה · דוחות · הגדרות · החלפות","ארכיון, ניתוח נתונים, תשתית המערכת ובקשות החלפה"),
+  P(C.violet,"✦","קופיילוט ופאנל ניהול-על","יועץ חכם צף, ומסך נפרד לניהול כל העסקים"),
+ ],
+ narration:"המערכת בנויה משמונה לשוניות. סידור — לוח השיבוץ השבועי. עובדים — ניהול הצוות והזמינות. מעקב — מי הגיש זמינות ופאנל תקלות. צ'אט — תיבת הוואטסאפ. היסטוריה — ארכיון הסידורים. דוחות — עלות, שעות, דירוג ותובנות. הגדרות — חוקי עבודה, תפקידים ומשמרות. והחלפות — בקשות החלפת משמרת. בנוסף יש כפתור קופיילוט צף לייעוץ חכם, ופאנל ניהול-על נפרד לבעל המערכת. נעבור עכשיו על כל אחד מהם לעומק."},
+
+{kicker:"לשונית סידור", title:"לוח השיבוץ השבועי",
+ sub:"המסך המרכזי של המערכת — רשת שבועית לפי ימים ומשמרות.",
+ points:[
+  P(C.brand,"▦","רשת מלאה","כל משבצת מציגה כמה עובדים דרושים, מי משובץ ובאילו שעות"),
+  P(C.emer,"⚡","צור סידור","יצירה אוטומטית מלאה בלחיצה אחת, עם הוספה ידנית וכשירות"),
+  P(C.amber,"⬚","חוסרים","\"חסר\" מסומן באדום — לחיצה מציגה מועמדים מתאימים"),
+  P(C.violet,"↗","פרסום","שולח לכל עובד את המשמרות שלו בוואטסאפ"),
+ ],
+ narration:"נתחיל בלב המערכת — לשונית הסידור. זו רשת שבועית לפי ימים ומשמרות. כל משבצת מציגה כמה עובדים דרושים מכל תפקיד, מי כבר משובץ, ובאילו שעות. התאריכים מופיעים על כל יום, וכל סוג משמרת מקבל צבע. הכפתור המרכזי הוא \"צור סידור\" — הוא בונה סידור מלא אוטומטית. אפשר גם להוסיף עובד ידנית לכל משבצת, והמערכת בודקת שהוא כשיר. משבצת שחסר בה עובד מסומנת באדום, ולחיצה עליה מציגה מי המועמדים המתאימים. בסוף לוחצים \"פרסום\", וכל עובד מקבל בוואטסאפ את המשמרות שלו. אפשר גם לאפס סידור, לפתוח את השבוע הבא, ולייצא."},
+
+{kicker:"מנוע השיבוץ", title:"איך המערכת <span class='accent'>מחליטה</span> מי משובץ",
+ sub:"שלושה עקרונות מנחים — וקו אדום אחד שלא נחצה.",
+ points:[
+  P(C.brand,"★","הכי מוגבל קודם","ממלא קודם את המשבצות הקשות לאיוש, כדי לא להיתקע"),
+  P(C.emer,"⚖","הוגנות","מאזן עומס סופ״ש וסגירות, וזוכר מי נשא בעומס בשבוע שעבר"),
+  P(C.violet,"◎","העדפות ומכסות","מכבד מינימום ומקסימום משמרות לכל עובד"),
+ ],
+ narration:"מאחורי הכפתור \"צור סידור\" עומד מנוע חכם. הוא פועל לפי שלושה עקרונות. ראשון — הכי מוגבל קודם: המערכת ממלאת תחילה את המשבצות הקשות ביותר לאיוש, אלה עם הכי מעט מועמדים, כדי לא להישאר תקועה. שני — הוגנות: היא מאזנת את העומס הלא-נעים, כמו סופי שבוע וסגירות, בין כל העובדים, וזוכרת מי כבר נשא בעומס בשבוע שעבר. שלישי — העדפות ומכסות: היא מכבדת את המינימום והמקסימום של כל עובד. ומעל הכול יש קו אדום שלעולם לא נחצה — חוקי העבודה: מנוחה בין משמרות, מקסימום שעות, עוצר לקטינים ואיסור חפיפה. גם במחסור בעובדים, המערכת תעדיף להשאיר משבצת ריקה מאשר להפר חוק."},
+
+{kicker:"מנוע השיבוץ", title:"שיבוץ בכפייה — כשאין ברירה",
+ sub:"כשאין אף עובד זמין וכשיר, המערכת יכולה לכפות שיבוץ — בזהירות.",
+ points:[
+  P(C.amber,"!","מוותר רק על העדפות","זמינות או מקסימום משמרות — אף פעם לא על חוק"),
+  P(C.red,"⚠","מסומן באדום","כל שיבוץ כזה מוצג בבירור עם הסבר, ומחכה לאישור"),
+  P(C.emer,"↧","נבחר בהוגנות","בעל העומס הנמוך ביותר, ובעדיפות למי ששלח זמינות"),
+ ],
+ narration:"מה קורה כשאין אף עובד זמין וכשיר למשבצת? במקום להשאיר חור, המערכת יכולה לכפות שיבוץ — אבל רק על ידי ויתור על העדפות, כמו זמינות או מקסימום משמרות, ולעולם לא על חוק עבודה. כל שיבוץ כפוי מסומן באדום עם סימן אזהרה ובפאנל נפרד, וכולל הסבר מלא בעברית: מה בדיוק נעקף ולמה נבחר דווקא העובד הזה. המערכת בוחרת את בעל העומס ההוגן הנמוך ביותר, ותמיד נותנת עדיפות למי ששלח זמינות על פני מי שלא. כך אתם שולטים לגמרי, ומאשרים ביודעין."},
+
+{kicker:"פיצ'ר מתקדם", title:"שעות חופשי ושיבוץ <span class='accent'>חלקי</span>",
+ sub:"כי לא כל עובד זמין למשמרת מלאה.",
+ points:[
+  P(C.brand,"◷","בורר שעות מדויק","זמין כל היום, טווח שעות מדויק בכל דקה, או לא יכול"),
+  P(C.emer,"✂","חיתוך לשעות","זמין עד 20:00? ישובץ 16:00 עד 20:00 בלבד — לא משמרת מלאה"),
+  P(C.violet,"⁙","פיצול משמרת","משבצת אחת מתחלקת בין כמה עובדים לאורך הזמן"),
+ ],
+ narration:"אחד הפיצ'רים החזקים של המערכת הוא שעות חופשי ושיבוץ חלקי — כי במציאות, לא כל עובד זמין למשמרת מלאה. עובד יכול להגדיר טווח שעות מדויק שבו הוא פנוי, למשל ארבע שעות בלבד, ולא רק \"זמין\" או \"לא זמין\". הבחירה היא בכל דקה, בפורמט של עשרים וארבע שעות. המנוע חותך את השיבוץ בדיוק לחלון של העובד: אם המשמרת עד חצות והוא פנוי רק עד שמונה בערב, הוא ישובץ עד שמונה בלבד — וזה מה שיופיע בסידור ובדוחות. ואם צריך, משבצת אחת יכולה להתחלק בין כמה עובדים: אחד בתחילת המשמרת והשני בהמשך — כך גם מי שפנוי לחלק מהזמן תורם לכיסוי המלא."},
+
+{kicker:"פיצ'ר מתקדם", title:"סדר עדיפות למילוי משבצת",
+ sub:"מהפתרון הטוב ביותר — ועד המוצא האחרון.",
+ points:[
+  P(C.emer,"1","עובד שמכסה הכול","מי שזמין למלוא המשמרת — עדיפות ראשונה"),
+  P(C.brand,"2","פיצול בין חלקיים","מחלקים בין כמה שזמינים לחלקי שעות"),
+  P(C.amber,"3","כפייה — מי ששלח","כופים, בעדיפות למי שכבר שלח זמינות"),
+  P(C.red,"4","כפייה — ללא מידע","רק כמוצא אחרון, מי שטרם התקבלה עבורו זמינות"),
+ ],
+ narration:"כשהמנוע ממלא משבצת, הוא עובד לפי סדר עדיפות ברור. ראשית — הוא מחפש עובד יחיד שזמינותו מכסה את כל המשמרת. אם אין כזה — הוא מפצל את המשבצת בין כמה עובדים שזמינים לחלקי שעות, ברצף. אם עדיין חסר — הוא עובר לכפייה, ותמיד מעדיף לכפות קודם את מי שכבר שלח זמינות, גם אם היא לא מתאימה בדיוק. ורק כמוצא אחרון ממש, במצב של מחסור אמיתי, הוא יכפה מישהו שטרם התקבלה עבורו זמינות כלל. בכל שלב, חוקי העבודה נשמרים."},
+
+{kicker:"פיצ'ר מתקדם", title:'"אין מידע" — ברירת מחדל נכונה',
+ sub:"לא מניחים שעובד זמין רק כי הוא לא ענה.",
+ points:[
+  P(C.amber,"⏳","טרם התקבלה זמינות","עובד שלא הגיב ולא הוגדר — מסומן, לא \"זמין כל השבוע\""),
+  P(C.sky,"◔","תמונה אמיתית","רואים בדיוק על מי יש מידע ועל מי לא"),
+  P(C.emer,"✓","בלי הפתעות","לא משובץ אוטומטית — נכפה רק במחסור אמיתי"),
+ ],
+ narration:"פיצ'ר קטן אבל קריטי — ברירת המחדל של \"אין מידע\". עובד שעדיין לא הגיב בוואטסאפ וגם לא הוגדר ידנית, מסומן במערכת כ\"טרם התקבלה זמינות\", ולא כ\"זמין כל השבוע\". זה חשוב, כי כך התמונה תמיד אמיתית — אתם רואים בדיוק על מי יש מידע ועל מי אין. בטאב העובדים הוא יופיע בלי אף יום מסומן, עם באנר ברור וסימון שעון-חול ליד שמו. ובשיבוץ האוטומטי, המערכת לא תשבץ אותו כזמין — היא תכפה אותו רק כמוצא אחרון, במחסור אמיתי. כך אין הפתעות של עובד שלא אישר בכלל."},
+
+{kicker:"לשונית עובדים", title:"ניהול הצוות והזמינות",
+ sub:"כרטיס לכל עובד, ועורך זמינות נוח.",
+ points:[
+  P(C.emer,"◉","כרטיס העובד","טלפון, גיל, מינ׳/מקס׳ משמרות, שכר לשעה, תפקידים והערות"),
+  P(C.brand,"◷","עריכת זמינות","בחירת יום, שעות מדויקות, וסיכום שבועי — מתעדכן מוואטסאפ"),
+  P(C.violet,"↗","פעולות","שליחת סיכום אישי, השבתה, דירוג תרומה וחיפוש מהיר"),
+ ],
+ narration:"בלשונית העובדים מנהלים את כל הצוות. לכל עובד יש כרטיס עם הפרטים שלו: טלפון, תאריך לידה שמזהה אוטומטית קטין, מינימום ומקסימום משמרות לשבוע, שכר לשעה לחישוב עלות, התפקידים שהוא מוסמך אליהם, והערות מעסיק כמו חוזה או אישורים. באותו מסך עורכים את הזמינות שלו — בוחרים לכל יום זמין, שעות מסוימות או לא יכול, ורואים סיכום שבועי מרוכז. הזמינות מתעדכנת אוטומטית מתשובות הוואטסאפ. אפשר גם לשלוח לעובד סיכום אישי, להשבית ולהחזיר עובד לפעילות, ולראות את דירוג התרומה שלו."},
+
+{kicker:"לשונית מעקב", title:"מרכז שליטה — מי הגיב ומה תקוע",
+ sub:"מעקב חי אחר הגשת זמינות ותקלות.",
+ points:[
+  P(C.sky,"◔","מצב הגשה","כמה הגישו מתוך הצוות, מי כבר הגיש ומי עדיין ממתין"),
+  P(C.amber,"⚠","פאנל תקלות","לא-מגיבים, כשלי שליחה, חסרי טלפון, ומי שביטל הסכמה"),
+ ],
+ narration:"לפני שיוצרים סידור, כדאי לעצור בלשונית המעקב — מרכז השליטה. במבט אחד רואים כמה עובדים כבר הגישו זמינות לשבוע הנוכחי, מי כבר הגיש ומתי, ומי עדיין חסר. לצד זה יש פאנל תקלות שמרכז את כל מה שדורש טיפול: עובדים שלא הגיבו לבקשה, כשלים בשליחת הודעות וואטסאפ, עובדים בלי מספר טלפון, ומי שביטל הסכמה או ממתין לאישור. כך אף אחד לא נופל בין הכיסאות."},
+
+{kicker:"לשונית צ׳אט", title:"תיבת וואטסאפ — נכנס ויוצא",
+ sub:"שיחה מלאה מול כל עובד, בתוך המערכת.",
+ points:[
+  P(C.violet,"✉","שרשור לכל עובד","כל ההודעות היוצאות והנכנסות במקום אחד, עם מונה שלא-נקרא"),
+  P(C.emer,"⤺","תשובה הופכת לזמינות","העובד עונה בטקסט חופשי — והמערכת מפענחת ומעדכנת לבד"),
+ ],
+ narration:"לשונית הצ'אט היא תיבת וואטסאפ מלאה בתוך המערכת. כל ההודעות שיצאו לעובד — בקשות זמינות, סידור, הודעות פתיחה — וכל מה שהוא ענה, מרוכזות בשרשור אחד לכל עובד, עם מונה הודעות שלא נקראו. אפשר לשלוח הודעה ישירות מהמערכת בלי לצאת לוואטסאפ. והכי חכם — כשעובד עונה בהודעה רגילה, המערכת מפענחת מהטקסט את הימים והשעות שהוא פנוי, ומעדכנת את הזמינות שלו אוטומטית. התשובה הופכת לנתונים, בלי הקלדה ידנית."},
+
+{kicker:"אוטומציה", title:"וואטסאפ ואוטומציה שבועית",
+ sub:"המערכת עובדת גם כשאתם לא.",
+ points:[
+  P(C.brand,"⟳","בקשת זמינות אוטומטית","נשלחת לכל הצוות בכל שבוע, ביום ובשעה שתבחרו"),
+  P(C.emer,"◍","הודעת פתיחה","עובד חדש מקבל אוטומטית הסבר וברכה בוואטסאפ"),
+  P(C.violet,"↗","שליחת הסידור","בפרסום — כל עובד מקבל את המשמרות שלו"),
+ ],
+ narration:"המערכת יודעת לעבוד גם כשאתם לא. אפשר להגדיר שבקשת הזמינות תישלח אוטומטית לכל הצוות בכל שבוע, ביום ובשעה שתבחרו, עם הגנה שמוודאת שליחה אחת בלבד. כשמוסיפים עובד חדש עם טלפון, נשלחת אליו אוטומטית הודעת פתיחה שמסבירה שהוא יקבל בקשות וסידור בוואטסאפ. וכשמפרסמים את הסידור — כל עובד מקבל את המשמרות שלו. את כל תוכן ההודעות אפשר לערוך בהגדרות."},
+
+{kicker:"לשונית החלפות", title:"החלפות משמרת בשליטה מלאה",
+ sub:"כשעובד לא יכול — בלי בלגן.",
+ points:[
+  P(C.red,"1","פתיחת בקשה","מורידים עובד ממשמרת — נפתחת בקשת החלפה"),
+  P(C.amber,"2","התאמת מחליף","המערכת מציגה מי כשיר וזמין למלא את המקום"),
+  P(C.emer,"3","לקיחה ואישור","עובד לוקח, המנהל מאשר, והשינוי נרשם בהיסטוריה"),
+ ],
+ narration:"לשונית ההחלפות מטפלת במצב שבו עובד כבר לא יכול. כשמורידים עובד ממשמרת, נפתחת בקשת החלפה. המערכת מזהה אוטומטית מי כשיר לתפקיד ופנוי למלא את המקום, ומציגה אותם — או מודיעה שאין עובד זכאי. עובד לוקח את המשמרת, המנהל מאשר או דוחה, וכל השינוי נרשם. ההיסטוריה נשמרת — מי הפיל ומי כיסה — גם לצורך הדוחות והדירוג."},
+
+{kicker:"דוחות והיסטוריה", title:"דוחות, תובנות וארכיון",
+ sub:"כל המספרים והמגמות — מבוססים על סידורים שפורסמו.",
+ points:[
+  P(C.amber,"▣","פירוט לפי עובד","משמרות, שעות, עלות שכר, סופ״ש, סגירות, החלפות ודירוג"),
+  P(C.emer,"◈","תובנות חכמות","סימון אוטומטי של היסטים בהוגנות, ניצול וכיסוי"),
+  P(C.muted,"▤","ארכיון","כל שבוע שפורסם נשמר — לחזרה, השוואה ובקרה"),
+ ],
+ narration:"לשונית הדוחות נותנת לכם את כל התמונה המספרית. לכל עובד: כמה משמרות ושעות, עלות שכר, כמה סופי שבוע וסגירות, כמה החלפות עשה, ומה הדירוג שלו. יש גם סיכום ארגוני של כיסוי, שעות ועלות כוללת. חלק \"תובנות חכמות\" מסמן לכם אוטומטית דברים חשובים — היסטים בהוגנות, עובדים בניצול-יתר או חוסר, ובעיות כיסוי. וכל זה מבוסס רק על סידורים שפורסמו, לא על טיוטות. לצד זה, לשונית ההיסטוריה שומרת כל שבוע שפורסם כתיקייה בארכיון, כדי שתוכלו לחזור, להשוות ולבקר לאורך זמן."},
+
+{kicker:"לשונית הגדרות", title:"התשתית של המערכת",
+ sub:"כאן מגדירים איך המסעדה עובדת.",
+ points:[
+  P(C.red,"⚖","חוקי עבודה","מנוחה, מקסימום שעות, עוצר קטינים ושעת סגירה"),
+  P(C.emer,"◐","תפקידים","מלצר, טבח, ברמן, אחראי — כמה שתרצו"),
+  P(C.brand,"▦","משמרות ודרישות","לכל יום: משמרות, שעות, וכמה עובדים מכל תפקיד"),
+  P(C.violet,"⟳","אוטומציה","תוכן ההודעות, יום ושעת שליחה שבועית"),
+ ],
+ narration:"בלשונית ההגדרות מגדירים את התשתית של המערכת. קודם כול חוקי העבודה — מנוחה מינימלית בין משמרות, מקסימום שעות ליום ולשבוע, שעת עוצר לקטינים ושעת סגירה. אלה הכללים שהמנוע אוכף. אחר כך התפקידים — כל המקצועות במסעדה, וכל עובד משויך לשלו. ואז החלק המרכזי — משמרות ודרישות: לכל יום מגדירים אילו משמרות יש, באילו שעות, וכמה עובדים מכל תפקיד צריך בכל אחת. ולבסוף האוטומציה — תוכן הודעת הזמינות, יום ושעת השליחה, והודעת הפתיחה."},
+
+{kicker:"קופיילוט", title:"יועץ חכם — חינם, בתוך המערכת",
+ sub:"כפתור צף שמבין את הנתונים שלכם.",
+ points:[
+  P(C.violet,"?","שואלים בחופשי","מי לא הגיש, כמה חוסרים, כמה כפייה, כמה עובדים פעילים"),
+  P(C.emer,"₪","חינם לגמרי","עובד מהנתונים הקיימים — בלי מודל חיצוני בתשלום"),
+  P(C.brand,"⚡","מיידי","הצעות שאלות מוכנות, ותשובה תוך כדי עבודה"),
+ ],
+ narration:"בפינת המסך יש כפתור קופיילוט צף — יועץ חכם. לוחצים, ונפתח צ'אט ייעוץ שעונה על שאלות ניהוליות מתוך הנתונים שכבר קיימים במערכת. אפשר לשאול מי עוד לא הגיש זמינות, כמה חוסרים יש בסידור, כמה שיבוצי כפייה, או כמה עובדים פעילים. הוא עובד על היגיון פנימי וחישוב מהנתונים — לא על מודל חיצוני בתשלום — כך שהוא חינמי לחלוטין, ואף מידע לא נשלח החוצה. הוא מציג הצעות שאלות מוכנות ועונה מיד."},
+
+{kicker:"פאנל ניהול-על", title:"ניהול כל העסקים במקום אחד",
+ sub:"מסך נפרד לבעל המערכת — הקמה, מנויים ותמיכה.",
+ points:[
+  P(C.brand,"⌂","הקמת עסק או רשת","עסק יחיד או מטה עם סניפים, עם פרטי כניסה"),
+  P(C.emer,"◇","ניהול מנוי","תוכנית, מכסה, מחיר, השהיה, הארכה ווואטסאפ"),
+  P(C.violet,"⇄","התחזות לתמיכה","כניסה לעסק לצורך תמיכה, וחזרה בלחיצה"),
+ ],
+ narration:"מעל כל העסקים יש פאנל ניהול-על — מסך נפרד לבעל המערכת. משם אפשר להקים עסק חדש, יחיד או רשת שלמה עם מטה וסניפים, עם שם משתמש וסיסמה. אפשר לנהל את המנוי של כל עסק: תוכנית, מכסת עובדים, מחיר חודשי, השהיה, הארכה והפעלת וואטסאפ. אפשר לצפות בפרטי הכניסה באופן מוצפן ומאובטח, לאפס סיסמה, ולהיכנס לעסק לצורך תמיכה ואז לחזור בלחיצה. גם זהות השולח בוואטסאפ מוגדרת לכל עסק בנפרד."},
+
+{type:"closing",
+ narration:"וזהו — עברנו על כל המערכת. סַדְרָן הופך את הסידור השבועי לחכם, הוגן ולפי חוק: איסוף זמינות בוואטסאפ, שיבוץ אוטומטי, שעות חופשי ופיצול, הוגנות וחוקי עבודה, מעקב, החלפות, דוחות ותובנות — הכול במקום אחד, בעברית מלאה. בלי טבלאות, בלי רדיפות אחרי עובדים, ובלי כאב ראש. תודה שצפיתם — וזה הזמן לסדר."},
+];
+
+// ---- render ----
+const stage=document.getElementById('stage');
+function el(t,c,h){const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;}
+scenes.forEach((sc,i)=>{
+  const d=el('div','scene'); d.dataset.i=i;
+  d.appendChild(el('div','num','SADRAN · '+String(i+1).padStart(2,'0')+' / '+String(scenes.length).padStart(2,'0')));
+  if(sc.type==="title"){
+    d.appendChild(el('div','logo','ס'));
+    d.appendChild(el('h1','','<span>סַדְרָן</span>'));
+    d.appendChild(el('div','sub','מערכת שיבוץ משמרות חכמה למסעדות — מבוססת וואטסאפ.<br>מדריך וידאו מלא: כל הפיצ׳רים, מסך אחר מסך.'));
+    const ch=el('div','chips'); ["איסוף זמינות בוואטסאפ","שיבוץ אוטומטי","שעות חופשי ופיצול","הוגנות וחוקי עבודה","מעקב והחלפות","דוחות ותובנות"].forEach(t=>ch.appendChild(el('span','chip',t))); d.appendChild(ch);
+  } else if(sc.type==="closing"){
+    d.appendChild(el('div','logo','ס'));
+    d.appendChild(el('h1','','הסידור השבועי —<br><span class="accent">חכם, הוגן ולפי חוק</span>'));
+    d.appendChild(el('div','sub','בלי טבלאות, בלי רדיפות, בלי כאב ראש. תודה שצפיתם — וזה הזמן לסדר.'));
+    const ch=el('div','chips'); ["וואטסאפ","שיבוץ אוטומטי","שעות חופשי","פיצול משמרות","הוגנות","חוקי עבודה","מעקב","החלפות","דוחות","קופיילוט"].forEach(t=>ch.appendChild(el('span','chip',t))); d.appendChild(ch);
+    d.appendChild(el('div','sub','<span style="color:#64748b;font-size:.8em">sadran.app@walla.co.il</span>'));
+  } else {
+    d.appendChild(el('div','kicker',sc.kicker));
+    d.appendChild(el('h1','',sc.title));
+    if(sc.sub)d.appendChild(el('div','sub',sc.sub));
+    const pts=el('div','points');
+    (sc.points||[]).forEach(pt=>{
+      const row=el('div','pt');
+      row.appendChild(el('div','dot','<span>'+pt.label+'</span>')).style.background=pt.color;
+      const tx=el('div','txt'); tx.appendChild(el('b','',pt.head)); tx.appendChild(el('span','',pt.body)); row.appendChild(tx);
+      pts.appendChild(row);
+    });
+    d.appendChild(pts);
+  }
+  stage.appendChild(d);
+});
+const sceneEls=[...document.querySelectorAll('.scene')];
+
+// ---- playback + TTS ----
+let cur=0, playing=false, muted=false, fallbackTimer=null, heVoice=null;
+const capText=document.getElementById('capText'), barFill=document.getElementById('barFill'), idx=document.getElementById('idx');
+const synth=window.speechSynthesis;
+
+function pickVoice(){
+  if(!synth)return;
+  const vs=synth.getVoices();
+  heVoice=vs.find(v=>/he|iw/i.test(v.lang))||null;
+}
+if(synth){ pickVoice(); synth.onvoiceschanged=pickVoice; }
+
+function estMs(t){ return Math.max(4200, t.length*80); }
+
+function show(i){
+  cur=(i+scenes.length)%scenes.length;
+  sceneEls.forEach((e,k)=>e.classList.toggle('active',k===cur));
+  idx.textContent=(cur+1)+' / '+scenes.length;
+  barFill.style.width=((cur)/(scenes.length-1)*100)+'%';
+  capText.textContent=scenes[cur].narration;
+}
+function clearTimers(){ if(fallbackTimer){clearTimeout(fallbackTimer); fallbackTimer=null;} if(synth)synth.cancel(); }
+
+function speakAndAdvance(){
+  clearTimers();
+  const txt=scenes[cur].narration;
+  const advance=()=>{ if(playing){ if(cur<scenes.length-1) go(cur+1); else stop(); } };
+  if(synth && heVoice && !muted){
+    // chunk into sentences to avoid long-utterance cutoffs
+    const parts=txt.split(/(?<=[.!?])\s+/).filter(Boolean);
+    let k=0;
+    const speakNext=()=>{
+      if(!playing) return;
+      if(k>=parts.length){ advance(); return; }
+      const u=new SpeechSynthesisUtterance(parts[k]); u.voice=heVoice; u.lang=heVoice.lang; u.rate=1.02; u.pitch=1;
+      u.onend=()=>{ k++; speakNext(); };
+      u.onerror=()=>{ k++; speakNext(); };
+      synth.speak(u);
+    };
+    speakNext();
+  } else {
+    // no voice / muted → timed captions
+    fallbackTimer=setTimeout(advance, estMs(txt));
+  }
+}
+function go(i){ show(i); if(playing) speakAndAdvance(); }
+function play(){ playing=true; document.getElementById('play').textContent='⏸ הפסק'; speakAndAdvance(); }
+function stop(){ playing=false; document.getElementById('play').textContent='▶ נגן'; clearTimers(); barFill.style.width='100%'; }
+function pause(){ playing=false; document.getElementById('play').textContent='▶ נגן'; clearTimers(); }
+
+document.getElementById('play').onclick=()=>{ playing?pause():play(); };
+document.getElementById('next').onclick=()=>{ pause(); show(cur+1); };
+document.getElementById('prev').onclick=()=>{ pause(); show(cur-1); };
+document.getElementById('replay').onclick=()=>{ show(0); play(); };
+document.getElementById('mute').onclick=()=>{ muted=!muted; document.getElementById('mute').textContent=muted?'🔇 מושתק':'🔊 קול'; if(playing){ clearTimers(); speakAndAdvance(); } };
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault(); playing?pause():play();}
+  if(e.code==='ArrowLeft'){pause(); show(cur+1);}   // RTL: left = next
+  if(e.code==='ArrowRight'){pause(); show(cur-1);}
+});
+document.getElementById('go').onclick=()=>{
+  document.getElementById('start').style.display='none';
+  if(synth){ const u=new SpeechSynthesisUtterance(' '); synth.speak(u); } // unlock TTS on user gesture
+  show(0); play();
+};
+show(0);
+</script>
+</body>
+</html>

@@ -66,6 +66,9 @@ export async function swapRoutes(app: FastifyInstance) {
     if (!(await swapInOrg(req.orgId, id))) return reply.code(404).send({ error: 'בקשה לא נמצאה' });
     const parsed = claimSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    // tenant isolation: the claiming employee must belong to this org
+    const emp = await prisma.employee.findUnique({ where: { id: parsed.data.employeeId }, select: { orgId: true } });
+    if (!emp || emp.orgId !== req.orgId) return reply.code(404).send({ error: 'עובד לא נמצא' });
     try {
       return await claimSwap(id, parsed.data.employeeId);
     } catch (e) {

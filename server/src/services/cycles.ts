@@ -4,7 +4,7 @@
 
 import { shiftDuration } from '@engine';
 import { prisma } from '../db';
-import { currentGaps } from './gaps';
+import { currentGaps, slotDeficit } from './gaps';
 
 export interface CycleSummary {
   id: string;
@@ -20,7 +20,7 @@ export interface CycleSummary {
 export async function listCyclesWithStats(orgId: string): Promise<CycleSummary[]> {
   const [cycles, demand, employees] = await Promise.all([
     prisma.weekCycle.findMany({ where: { orgId }, orderBy: { weekStartDate: 'desc' } }),
-    prisma.shiftSlot.findMany({ where: { shift: { orgId } } }),
+    prisma.shiftSlot.findMany({ where: { shift: { orgId } }, include: { shift: true } }),
     prisma.employee.findMany({ where: { orgId }, select: { id: true, hourlyRate: true } }),
   ]);
   const rate = new Map(employees.map((e) => [e.id, e.hourlyRate]));
@@ -33,17 +33,20 @@ export async function listCyclesWithStats(orgId: string): Promise<CycleSummary[]
 
   return cycles.map((c) => {
     const rows = assignments.filter((a) => a.cycleId === c.id);
-    const filledBySlot = new Map<string, number>();
+    const bySlot = new Map<string, { startTime: string; endTime: string }[]>();
     let hours = 0;
     let laborCost = 0;
     for (const a of rows) {
-      filledBySlot.set(a.slotId, (filledBySlot.get(a.slotId) ?? 0) + 1);
-      const h = shiftDuration(a.startTime, a.shift.endTime) / 60;
+      const endT = a.endTime ?? a.shift.endTime;
+      const list = bySlot.get(a.slotId) ?? [];
+      list.push({ startTime: a.startTime, endTime: endT });
+      bySlot.set(a.slotId, list);
+      const h = shiftDuration(a.startTime, endT) / 60;
       hours += h;
       laborCost += h * (rate.get(a.employeeId) ?? 0);
     }
     let missing = 0;
-    for (const d of demand) missing += Math.max(0, d.count - (filledBySlot.get(d.id) ?? 0));
+    for (const d of demand) missing += slotDeficit(d.startTime, d.shift.endTime, d.count, bySlot.get(d.id) ?? []);
     return {
       id: c.id,
       weekStartDate: c.weekStartDate,
@@ -79,6 +82,7 @@ export async function cycleDetail(orgId: string, cycleId: string) {
       slotId: a.slotId,
       roleId: a.roleId,
       startTime: a.startTime,
+      endTime: a.endTime ?? a.shift.endTime,
       status: a.status,
     })),
     gaps,

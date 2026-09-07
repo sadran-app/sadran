@@ -3,34 +3,171 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --ring: 229 112 47; /* brand rgb */
+    --line: 23 18 14;   /* ink rgb, for hairlines */
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+
   body {
-    @apply text-slate-800 font-sans antialiased;
+    @apply font-sans antialiased;
     margin: 0;
-    background: radial-gradient(1200px 500px at 100% -10%, #fdeee4 0%, rgba(253, 238, 228, 0) 55%), #f6f7f9;
+    color: #2a231d;
+    /* warm porcelain, one restrained accent glow, and a faint tactile grain layer */
+    background-color: #f2f0ea;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E"),
+      radial-gradient(1100px 500px at 100% -16%, rgba(251, 231, 219, 0.85) 0%, rgba(251, 231, 219, 0) 55%);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight text-ink;
+    text-wrap: balance;
+  }
+  h1 { font-weight: 800; letter-spacing: -0.022em; }
+  h2, h3 { font-weight: 700; letter-spacing: -0.012em; }
+
+  * { scrollbar-width: thin; scrollbar-color: rgba(23, 18, 14, 0.16) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: rgba(23, 18, 14, 0.14); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(23, 18, 14, 0.26); background-clip: content-box; }
+
+  ::selection { background: rgba(229, 112, 47, 0.2); }
+  :focus-visible { outline: 2px solid rgba(var(--ring), 0.55); outline-offset: 2px; border-radius: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
   }
 }
 
 @layer components {
+  /* surfaces — clean white with a warm hairline, no generic accent-rail */
   .card {
-    @apply bg-white rounded-2xl border border-slate-100 shadow-soft;
+    @apply bg-white rounded-2xl shadow-soft;
+    border: 1px solid rgba(23, 18, 14, 0.07);
   }
+  .card-hover { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-pop; }
+
+  /* editorial eyebrow — a short pine rule + small label (RTL-friendly, no faux-uppercase) */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-[12px] font-bold text-pine;
+    letter-spacing: 0.02em;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0.55;
+  }
+
+  /* dimensional enamel-badge — domed highlight + inner shade, reads as a physical mark */
+  .badge-3d {
+    background-image: linear-gradient(155deg, #f2a877 0%, #e5702f 46%, #b64d1c 100%);
+    box-shadow:
+      inset 0 1.5px 1px rgba(255, 255, 255, 0.55),
+      inset 0 -3px 5px rgba(120, 50, 20, 0.45),
+      0 6px 16px -5px rgba(229, 112, 47, 0.55),
+      0 2px 4px rgba(23, 18, 14, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  /* buttons feel like physical, pressable keys: a hairline top-highlight, a grounded
+     ambient+direct shadow, and a real "press-down" on :active. */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-[filter,box-shadow,transform] duration-150 disabled:opacity-45 disabled:pointer-events-none select-none;
+    transform: translateZ(0);
   }
+  .btn:active { transform: translateY(1px); }
   .btn-primary {
-    @apply btn bg-ink text-white hover:bg-slate-700 shadow-sm;
+    @apply btn text-white;
+    background-image: linear-gradient(180deg, #2f2620 0%, #17120e 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 1px 1px rgba(23,18,14,0.25), 0 9px 20px -8px rgba(23,18,14,0.5);
   }
+  .btn-primary:hover { filter: brightness(1.2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 1px rgba(23,18,14,0.25), 0 12px 26px -8px rgba(23,18,14,0.55); }
+  .btn-primary:active { box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(23,18,14,0.35); }
   .btn-accent {
-    @apply btn bg-brand text-white hover:bg-brand-dark shadow-sm;
+    @apply btn text-white;
+    background-image: linear-gradient(180deg, #f08a55 0%, #e5702f 55%, #ce5a22 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 1px 1px rgba(150,60,25,0.3), 0 9px 22px -8px rgba(229,112,47,0.55);
   }
+  .btn-accent:hover { filter: brightness(1.05); box-shadow: inset 0 1px 0 rgba(255,255,255,0.32), 0 1px 1px rgba(150,60,25,0.3), 0 12px 28px -8px rgba(229,112,47,0.7); }
+  .btn-accent:active { box-shadow: inset 0 1px 2px rgba(150,60,25,0.35), 0 1px 2px rgba(150,60,25,0.3); }
+  .btn-pine {
+    @apply btn text-white;
+    background-image: linear-gradient(180deg, #3a7060 0%, #2f5d4f 55%, #244a3f 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 1px rgba(20,50,40,0.3), 0 9px 22px -8px rgba(47,93,79,0.5);
+  }
+  .btn-pine:hover { filter: brightness(1.08); }
+  .btn-pine:active { box-shadow: inset 0 1px 2px rgba(20,50,40,0.35), 0 1px 2px rgba(20,50,40,0.3); }
   .btn-success {
-    @apply btn bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm;
+    @apply btn text-white;
+    background-image: linear-gradient(180deg, #3a7060 0%, #2f5d4f 55%, #244a3f 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 1px rgba(20,50,40,0.3), 0 9px 22px -8px rgba(47,93,79,0.5);
   }
+  .btn-success:hover { filter: brightness(1.1); }
+  .btn-success:active { box-shadow: inset 0 1px 2px rgba(20,50,40,0.35), 0 1px 2px rgba(20,50,40,0.3); }
   .btn-soft {
-    @apply btn bg-slate-100 text-slate-700 hover:bg-slate-200;
+    @apply btn bg-white text-ink;
+    border: 1px solid rgba(23, 18, 14, 0.09);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 2px rgba(23,18,14,0.06), 0 3px 8px -4px rgba(23,18,14,0.1);
   }
+  .btn-soft:hover { border-color: rgba(23, 18, 14, 0.16); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 4px rgba(23,18,14,0.07), 0 6px 14px -6px rgba(23,18,14,0.14); }
+  .btn-ghost { @apply btn bg-transparent text-slate-500 hover:bg-black/[0.04] hover:text-ink; }
+
   .input {
-    @apply w-full border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-brand/30 focus:border-brand;
+    @apply w-full bg-white rounded-xl px-3 py-2 text-sm outline-none transition-all;
+    border: 1px solid rgba(23, 18, 14, 0.12);
+  }
+  .input:focus { border-color: #e5702f; box-shadow: 0 0 0 3px rgba(229, 112, 47, 0.13); }
+
+  .pill { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold; }
+
+  .skeleton { @apply relative overflow-hidden rounded-lg; background: rgba(23, 18, 14, 0.06); }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+    animation: skeleton-shimmer 1.5s infinite;
+  }
+  @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+}
+
+@layer utilities {
+  .tnum { font-variant-numeric: tabular-nums; }
+  /* layered ambient+direct elevation — a surface that convincingly floats */
+  .floating {
+    box-shadow:
+      0 2px 4px -1px rgba(23, 18, 14, 0.05),
+      0 12px 26px -10px rgba(23, 18, 14, 0.13),
+      0 30px 60px -26px rgba(23, 18, 14, 0.12);
+  }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  /* frosted bar */
+  .glass {
+    background-color: rgba(248, 246, 241, 0.72);
+    backdrop-filter: saturate(1.5) blur(14px);
+    -webkit-backdrop-filter: saturate(1.5) blur(14px);
+  }
+  /* signature: faint vertical "schedule column" rhythm — the product's DNA as texture.
+     Rendered on a masked ::before so ONLY the texture fades — never the content above it. */
+  .ledger { position: relative; isolation: isolate; }
+  .ledger::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(90deg, rgba(23, 18, 14, 0.05) 0 1px, transparent 1px 66px);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   }
 }

@@ -17,11 +17,97 @@ model Organization {
   autoMessage String        @default("היי {שם}, נא לשלוח את הימים שבהם תוכל/י לעבוד בשבוע הקרוב 🙏")
   autoSendDay Int           @default(0) // day of week to send (0 = Sunday)
   autoSendTime String       @default("09:00") // 'HH:MM'
+  // welcome message auto-sent to a newly added employee (if WhatsApp is enabled)
+  welcomeEnabled Boolean    @default(true)
+  welcomeMessage String     @default("היי {שם}! ברוך/ה הבא/ה לצוות 🙌 מכאן תקבל/י בוואטסאפ את בקשות הזמינות ואת סידור העבודה השבועי.")
+  autoSendEnabled Boolean   @default(false) // run the weekly auto availability-request
+  lastAutoSentAt DateTime? // guard so the scheduler sends at most once per week
+
+  // --- chain support: a chain HQ (isChain=true) is a container for branch orgs ---
+  parentId    String?
+  parent      Organization?  @relation("Branches", fields: [parentId], references: [id], onDelete: Cascade)
+  branches    Organization[] @relation("Branches")
+  isChain     Boolean        @default(false)
+  businessType String        @default("restaurant") // restaurant | eventHall — gates the manager UI
+
+  // --- subscription / plan (billing) ---
+  planName             String?  // label shown to admin, e.g. "בסיסי" / "מורחב"
+  employeeQuota        Int      @default(20) // max employees that receive WhatsApp scheduling messages
+  whatsappEnabled      Boolean  @default(true) // if false, WhatsApp features are blocked for this business
+  monthlyPrice         Float    @default(0) // ₪ / month for this plan
+  status               String   @default("active") // active | suspended | expired
+  subscriptionStart    DateTime @default(now())
+  subscriptionEnd      DateTime? // null = open-ended; else auto-expires
+  whatsappMessageCount Int      @default(0) // lifetime WhatsApp messages sent to this business's employees
+  waMonthlyBudget      Int      @default(1000) // monthly cap of BILLABLE (out-of-window) messages — for monitoring
+  weeklyLaborBudget    Float    @default(0) // 4.2 — target ₪ labour spend per week (0 = not set)
+
+  // --- WhatsApp sender identity for THIS business ---
+  waPhoneNumberId String?
+  waPhoneDisplay  String? // human-readable sending number
+  waSenderName    String? // display name of the sender
+  waProfilePicUrl String? // profile picture URL
+
+  createdAt   DateTime      @default(now())
+
   managers    Manager[]
   roles       Role[]
   employees   Employee[]
   shifts      Shift[]
   cycles      WeekCycle[]
+  demandTemplates DemandTemplate[]
+}
+
+// A saved staffing-demand configuration ("סידור קיץ", "עומס חגים") — a snapshot of
+// role requirements per shift that a manager can re-apply in one click.
+model DemandTemplate {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name      String
+  data      String // JSON: [{ dayIndex, label, startTime, roleName, count }]
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+}
+
+// 3.1 — a vacation / reserve-duty / sick / other absence. When approved and it
+// overlaps a cycle's week, those days become unavailable for the employee.
+model TimeOffRequest {
+  id         String   @id @default(cuid())
+  orgId      String
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type       String   @default("vacation") // vacation | reserve | sick | other
+  startDate  DateTime // inclusive (date only)
+  endDate    DateTime // inclusive
+  status     String   @default("pending") // pending | approved | rejected
+  source     String   @default("manager") // manager | whatsapp
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId])
+  @@index([employeeId])
+}
+
+// 3.2 — a standing (recurring) availability rule ("never Fridays"). Applies to
+// EVERY new cycle once APPROVED by the manager, unless overridden that week.
+model StandingRule {
+  id         String   @id @default(cuid())
+  orgId      String
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  dayIndex   Int // 0–6
+  mode       String   @default("off") // off | hours
+  fromTime   String? // 'HH:MM' when mode = hours
+  toTime     String?
+  status     String   @default("pending") // pending | approved (manager decision)
+  source     String   @default("manager") // manager | whatsapp
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId])
+  @@index([employeeId])
 }
 
 // A branch manager's login. We create these accounts; no self-signup.
@@ -30,10 +116,14 @@ model Manager {
   id           String        @id @default(cuid())
   orgId        String? // null for the platform admin (belongs to no business)
   org          Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  email        String        @unique
-  passwordHash String
+  username     String?       @unique // primary login credential (email no longer required)
+  email        String?       @unique // optional/legacy
+  passwordHash String        // bcrypt — for authentication
+  passwordEnc  String? // reversibly-encrypted password so the platform admin can view it
   name         String
+  phone        String? // manager's WhatsApp number — for onboarding + password-change alerts
   isAdmin      Boolean       @default(false) // platform owner — the only one who can open businesses
+  lastLoginAt  DateTime?
   createdAt    DateTime      @default(now())
 }
 
@@ -45,6 +135,8 @@ model Role {
   employees   EmployeeRole[]
   slots       ShiftSlot[]
   assignments Assignment[]
+
+  @@index([orgId])
 }
 
 model Employee {
@@ -61,18 +153,25 @@ model Employee {
   hourlyRate     Float          @default(0) // ₪ לשעה — לחישוב עלות שכר בדוחות
   active         Boolean        @default(true)
   optInStatus    String         @default("pending") // pending | opted_in | opted_out
+  employmentNotes String?       // free notes for the employer (contract, permits, restrictions…)
   fairnessCredit Float          @default(0) // מצטבר בין מחזורים
+  maxConsecutiveDays Int?       // cap on consecutive worked days (null = no limit) — 3.3
   createdAt      DateTime       @default(now())
   roles          EmployeeRole[]
   availability   Availability[]
   assignments    Assignment[]
   fairnessLogs   FairnessLog[]
+  timeOff        TimeOffRequest[]
+  standingRules  StandingRule[]
+
+  @@index([orgId])
 }
 
 // many-to-many מפורש: קל לשאול "מי מוסמך לתפקיד X" ב-swap eligibility
 model EmployeeRole {
   employeeId String
   roleId     String
+  level      Int      @default(1) // seniority in this role: 1 junior … up (3.3)
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
@@ -94,6 +193,8 @@ model Shift {
   slots        ShiftSlot[]
   availability Availability[]
   assignments  Assignment[]
+
+  @@index([orgId, dayIndex])
 }
 
 // A staffing requirement inside a shift: N of a role starting at a given time.
@@ -106,7 +207,10 @@ model ShiftSlot {
   role        Role         @relation(fields: [roleId], references: [id])
   startTime   String // 'HH:MM' when this group arrives
   count       Int
+  minLevel    Int          @default(1) // minimum seniority required to fill this seat (3.3)
   assignments Assignment[]
+
+  @@index([shiftId])
 }
 
 model WeekCycle {
@@ -115,10 +219,14 @@ model WeekCycle {
   org           Organization   @relation(fields: [orgId], references: [id])
   weekStartDate DateTime
   status        String         @default("collecting") // collecting | proposed | published
+  dayNotes      String         @default("{}") // JSON {dayIndex: text} — manager notes per weekday
+  revenue       Float?         // 4.2 — actual revenue for the week (manager-entered; for labour-% analysis)
   availability  Availability[]
   assignments   Assignment[]
   swapRequests  SwapRequest[]
   fairnessLogs  FairnessLog[]
+
+  @@index([orgId, weekStartDate])
 }
 
 model Availability {
@@ -130,8 +238,41 @@ model Availability {
   shiftId    String
   shift      Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
   state      String // 'ok' | 'prefer' | 'cant'
+  createdAt  DateTime  @default(now()) // when the employee submitted (for live tracking)
 
   @@unique([cycleId, employeeId, shiftId])
+  @@index([cycleId])
+}
+
+// Free-hours availability: the exact window an employee can work on a given day
+// ("hours" 10:00–14:00), or the whole day ("all") / none ("off"). This is the source
+// of truth for hour-level scheduling; per-shift Availability is derived from it.
+model DayAvailability {
+  id         String   @id @default(cuid())
+  cycleId    String
+  employeeId String
+  dayIndex   Int // 0–6 (0 = Sunday)
+  mode       String   @default("all") // all | off | hours
+  fromTime   String? // 'HH:MM'
+  toTime     String? // 'HH:MM'
+  createdAt  DateTime @default(now()) // when it was set (manual config), for the monitor
+
+  @@unique([cycleId, employeeId, dayIndex])
+  @@index([cycleId])
+}
+
+// Manager-marked busyness of a shift for a given week. Feeds demand forecasting:
+// history is normalised by the load it happened under, then scaled by the expected
+// load of the upcoming week. Absent = "normal" (level 2), so it degrades to a plain
+// historical average when no load is marked.
+model ShiftLoad {
+  id      String @id @default(cuid())
+  cycleId String
+  shiftId String
+  level   Int    @default(2) // 1 quiet · 2 normal · 3 busy · 4 very busy
+
+  @@unique([cycleId, shiftId])
+  @@index([cycleId])
 }
 
 model Assignment {
@@ -147,12 +288,19 @@ model Assignment {
   roleId       String
   role         Role          @relation(fields: [roleId], references: [id])
   startTime    String // 'HH:MM' (copied from slot for convenience)
+  endTime      String? // actual worked end when clipped to an employee's free-hours window; null = the shift's end
   status       String        @default("proposed") // proposed | published | vacated
+  forced       Boolean       @default(false) // engine force-filled this seat (relaxed a preference, never a law)
+  forceReason  String? // Hebrew explanation of the forced assignment
+  locked       Boolean       @default(false) // manager pinned this seat — regenerate must keep it
   swapRequests SwapRequest[]
 
   // an employee can fill a given requirement at most once — makes duplicate
   // inserts (e.g. a double-clicked "generate") physically impossible
   @@unique([cycleId, slotId, employeeId])
+  @@index([cycleId, status])
+  @@index([employeeId])
+  @@index([slotId])
 }
 
 model SwapRequest {
@@ -176,6 +324,8 @@ model FairnessLog {
   employee        Employee  @relation(fields: [employeeId], references: [id])
   undesirableLoad Float // משקל סופ״ש / סגירה
   count           Int
+
+  @@index([cycleId])
 }
 
 // MockChannel כותב לכאן (Wizard-of-Oz): נותן יעד persistent ל-"נשלח לעובד"
@@ -185,5 +335,23 @@ model OutboxMessage {
   channel    String   @default("mock")
   kind       String // availability_request | schedule | open_shift | notify
   body       String
+  failed     Boolean  @default(false) // delivery failure — surfaced in the issues panel
   createdAt  DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+// Inbound WhatsApp messages from employees (fed by the webhook). Together with
+// OutboxMessage (outbound) this forms the in-app chat thread per employee.
+model InboundMessage {
+  id          String   @id @default(cuid())
+  employeeId  String
+  body        String
+  kind        String   @default("text") // text | image | audio | interactive | flow
+  mediaUrl    String?
+  waMessageId String? // WhatsApp wamid (dedup)
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId, createdAt])
 }

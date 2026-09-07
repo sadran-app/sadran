@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>סקר זמינות — סַדְרָן</title>
+<style>
+  :root{ --green:#25D366; --dark:#075E54; --red:#E24B4A; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{ margin:0; font-family:-apple-system,"Segoe UI",Arial,sans-serif; background:#e9edef; color:#111; }
+  .wrap{ max-width:460px; margin:0 auto; min-height:100vh; background:#f7f8fa; display:flex; flex-direction:column; }
+  header{ background:var(--dark); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:10px; }
+  header .av{ width:36px;height:36px;border-radius:50%;background:#128C7E;display:flex;align-items:center;justify-content:center;font-size:18px; }
+  header .t{ font-size:15px; font-weight:600; }
+  header .s{ font-size:11px; opacity:.8; }
+  main{ padding:16px; flex:1; }
+  h1{ font-size:17px; margin:0 0 2px; }
+  .sub{ font-size:13px; color:#667; margin:0 0 14px; }
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .chip{ padding:7px 13px; border-radius:18px; font-size:13px; border:1px solid #ccd; background:#fff; cursor:pointer; }
+  .chip.on{ background:var(--dark); color:#fff; border-color:var(--dark); }
+  .chip.avail{ background:rgba(37,211,102,.15); border-color:var(--green); }
+  .chip.off{ background:rgba(226,75,74,.13); border-color:var(--red); }
+  .card{ border:1px solid #dde; border-radius:14px; padding:14px; background:#fff; }
+  .card h2{ font-size:15px; margin:0 0 12px; }
+  .row2{ display:flex; gap:8px; margin-bottom:6px; }
+  .opt{ flex:1; padding:11px; border-radius:11px; font-size:13.5px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; border:1.5px solid #ccd; background:#fff; }
+  .opt.allon{ background:var(--green); border-color:var(--green); color:#0b3b23; }
+  .opt.offon{ background:var(--red); border-color:var(--red); color:#fff; }
+  .div{ text-align:center; font-size:11px; color:#99a; margin:11px 0; }
+  .times{ display:flex; gap:8px; }
+  .times .f{ flex:1; }
+  .times label{ display:block; font-size:11px; color:#667; margin-bottom:4px; }
+  select{ width:100%; padding:11px 8px; font-size:15px; border:1px solid #ccd; border-radius:9px; background:#fff; direction:ltr; text-align:center; }
+  .times.dim{ opacity:.35; pointer-events:none; }
+  .sumh{ font-size:12px; color:#667; font-weight:600; margin:16px 2px 6px; }
+  .sum{ display:flex; flex-direction:column; gap:5px; }
+  .srow{ display:flex; justify-content:space-between; align-items:center; border-radius:8px; padding:7px 11px; font-size:13px; }
+  .srow.ok{ background:rgba(37,211,102,.10); border:1px solid var(--green); }
+  .srow.no{ background:rgba(226,75,74,.10); border:1px solid var(--red); }
+  .empty{ font-size:12.5px; color:#99a; }
+  footer{ padding:14px 16px 22px; }
+  .send{ width:100%; background:var(--green); color:#053b23; border:none; border-radius:26px; padding:15px; font-size:16px; font-weight:600; cursor:pointer; }
+  .send:disabled{ opacity:.5; }
+  .done{ text-align:center; padding:60px 24px; }
+  .done .big{ font-size:56px; }
+  .done h2{ font-size:20px; margin:14px 0 6px; }
+  .done p{ color:#667; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <div class="av">🍽️</div>
+    <div><div class="t">מסעדת הנמל</div><div class="s">סקר זמינות</div></div>
+  </header>
+  <main>
+    <h1>זמינות לשבוע הבא</h1>
+    <p class="sub">בחר/י יום, וסמן/י את הזמינות שלך.</p>
+    <div class="chips" id="chips"></div>
+    <div class="card" id="card"></div>
+    <div class="sumh">הסיכום שלך:</div>
+    <div class="sum" id="sum"></div>
+  </main>
+  <footer>
+    <button class="send" id="send">שליחת זמינות</button>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  var TIMES=[]; for(var h=6;h<=23;h++){TIMES.push((h<10?'0':'')+h+':00');TIMES.push((h<10?'0':'')+h+':30');}
+  var st={}, cur=0;
+  function s(i){ return st[i]||(st[i]={mode:null,from:'',to:''}); }
+  function avail(i){ var x=st[i]; return x&&(x.mode==='all'||(x.mode==='hours'&&x.from&&x.to)); }
+  function sel(i){ var x=st[i]; return x&&(x.mode==='all'||x.mode==='off'||(x.mode==='hours'&&x.from&&x.to)); }
+
+  var chips=document.getElementById('chips');
+  DAYS.forEach(function(d,i){ var b=document.createElement('button'); b.className='chip'; b.textContent=d; b.onclick=function(){cur=i;render();}; chips.appendChild(b); });
+
+  function opts(selected){ return '<option value="">--:--</option>'+TIMES.map(function(t){return '<option'+(t===selected?' selected':'')+'>'+t+'</option>';}).join(''); }
+
+  function render(){
+    [].forEach.call(chips.children,function(b,i){ b.className='chip'+(i===cur?' on':(st[i]&&st[i].mode==='off'?' off':(avail(i)?' avail':''))); });
+    var x=s(cur), lock=(x.mode==='all'||x.mode==='off');
+    var c=document.getElementById('card');
+    c.innerHTML='<h2>יום '+DAYS[cur]+'</h2>'+
+      '<div class="row2">'+
+        '<div class="opt'+(x.mode==='all'?' allon':'')+'" id="ball">☀️ זמין כל היום</div>'+
+        '<div class="opt'+(x.mode==='off'?' offon':'')+'" id="boff">✕ לא יכול</div>'+
+      '</div>'+
+      '<div class="div">— או שעות מדויקות —</div>'+
+      '<div class="times'+(lock?' dim':'')+'">'+
+        '<div class="f"><label>מ</label><select id="from">'+opts(x.from)+'</select></div>'+
+        '<div class="f"><label>עד</label><select id="to">'+opts(x.to)+'</select></div>'+
+      '</div>';
+    document.getElementById('ball').onclick=function(){ x.mode=(x.mode==='all'?null:'all'); x.from='';x.to=''; render(); };
+    document.getElementById('boff').onclick=function(){ x.mode=(x.mode==='off'?null:'off'); x.from='';x.to=''; render(); };
+    document.getElementById('from').onchange=function(e){ x.from=e.target.value; x.mode=x.from?'hours':null; render(); };
+    document.getElementById('to').onchange=function(e){ x.to=e.target.value; x.mode=x.to?'hours':x.mode; render(); };
+    renderSum();
+  }
+  function renderSum(){
+    var h=document.getElementById('sum'); h.innerHTML=''; var any=false;
+    DAYS.forEach(function(d,i){ if(!sel(i))return; any=true; var x=st[i];
+      var off=x.mode==='off'; var txt=off?'לא יכול':(x.mode==='all'?'כל היום':(x.from+'–'+x.to));
+      var r=document.createElement('div'); r.className='srow '+(off?'no':'ok');
+      r.innerHTML='<span style="font-weight:600">יום '+d+'</span><span style="direction:ltr;color:#667">'+txt+'</span>'; h.appendChild(r);
+    });
+    if(!any) h.innerHTML='<div class="empty">עדיין לא נבחרו ימים.</div>';
+  }
+
+  document.getElementById('send').onclick=function(){
+    var out=[]; DAYS.forEach(function(d,i){ if(!sel(i))return; var x=st[i];
+      var rec={dayIndex:i,day:d};
+      if(x.mode==='off')rec.available=false; else if(x.mode==='all')rec.allDay=true; else {rec.from=x.from;rec.to=x.to;}
+      out.push(rec);
+    });
+    var body={employee:{name:'עובד לדוגמה',phone:'972500000000'},week:'next',availability:out,submittedAt:new Date().toISOString()};
+    this.disabled=true; this.textContent='שולח…';
+    fetch('/availability',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json();})
+      .then(function(){ document.getElementById('app').innerHTML='<div class="done"><div class="big">✅</div><h2>הזמינות נשלחה!</h2><p>תודה, קיבלנו את הזמינות שלך לשבוע הבא.</p></div>'; })
+      .catch(function(){ var b=document.getElementById('send'); b.disabled=false; b.textContent='שגיאה — נסה שוב'; });
+  };
+  render();
+})();
+</script>
+</body>
+</html>

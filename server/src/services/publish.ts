@@ -5,10 +5,26 @@ import { prisma } from '../db';
 import { channel } from '../channel';
 
 export async function publishCycle(cycleId: string) {
+  const cycle = await prisma.weekCycle.findUnique({ where: { id: cycleId } });
+  const alreadyPublished = cycle?.status === 'published';
+
   await prisma.$transaction([
     prisma.assignment.updateMany({ where: { cycleId, status: 'proposed' }, data: { status: 'published' } }),
     prisma.weekCycle.update({ where: { id: cycleId }, data: { status: 'published' } }),
   ]);
+
+  // Fairness balance: bank each employee's undesirable (weekend/closing) load from
+  // this week into their running credit, so future weeks favour whoever carried
+  // more. Done once — re-publishing the same cycle won't double-count.
+  if (!alreadyPublished) {
+    const logs = await prisma.fairnessLog.findMany({ where: { cycleId } });
+    const bumps = logs.filter((l) => l.undesirableLoad > 0);
+    if (bumps.length) {
+      await prisma.$transaction(
+        bumps.map((l) => prisma.employee.update({ where: { id: l.employeeId }, data: { fairnessCredit: { increment: l.undesirableLoad } } })),
+      );
+    }
+  }
 
   const assignments = await prisma.assignment.findMany({
     where: { cycleId, status: 'published' },

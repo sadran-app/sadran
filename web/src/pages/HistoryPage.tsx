@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, DAY_NAMES, WEEKEND_DAYS, type Config, type CycleSummary, type CycleView } from '../lib/api';
-import { IlDate } from '../lib/ilFields';
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   collecting: { label: 'באיסוף זמינות', cls: 'bg-sky-100 text-sky-700' },
@@ -11,56 +10,23 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
-function nextSunday() {
-  const d = new Date();
-  d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7));
-  return d.toISOString().slice(0, 10);
-}
 
 export function HistoryPage({ config }: { config: Config }) {
   const [cycles, setCycles] = useState<CycleSummary[]>([]);
   const [detail, setDetail] = useState<CycleView | null>(null);
-  const [newDate, setNewDate] = useState(nextSunday());
-  const [creating, setCreating] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   const load = () => api.listCycles().then(setCycles);
   useEffect(() => {
     load();
   }, []);
 
-  const createWeek = async () => {
-    setCreating(true);
-    setErr(null);
-    setMsg(null);
-    try {
-      await api.createCycle(newDate);
-      await load();
-      setMsg('נוצר שבוע חדש — הוא עכשיו השבוע הפעיל בלשונית "סידור".');
-      setTimeout(() => setMsg(null), 3500);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   if (detail) return <WeekView config={config} detail={detail} onBack={() => setDetail(null)} />;
 
   return (
     <div className="space-y-5">
-      <div className="card p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <div className="text-sm text-slate-600 mb-1">התחלת שבוע חדש</div>
-            <IlDate value={newDate} onChange={setNewDate} className="input w-44" />
-          </div>
-          <button onClick={createWeek} disabled={creating} className="btn-accent">{creating ? 'יוצר…' : '+ שבוע חדש'}</button>
-          {msg && <span className="text-sm text-emerald-600">{msg}</span>}
-        </div>
-        <p className="text-xs text-slate-400 mt-2">כל שבוע נפתח מיום ראשון (ראשון–שבת). לא ניתן לפתוח שני סידורים לאותו שבוע — התאריך יעוגן אוטומטית ליום ראשון.</p>
-        {err && <div className="mt-2 rounded-xl bg-red-50 border border-red-100 text-red-700 px-3 py-2 text-sm">{err}</div>}
+      <div>
+        <h2 className="text-lg font-semibold text-ink">ארכיון סידורים</h2>
+        <p className="text-xs text-slate-400 mt-1">כל הסידורים השבועיים שנוצרו. ליצירת סידור חדש — עבור ללשונית "סידור" ולחץ "צור סידור".</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

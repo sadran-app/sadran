@@ -48,17 +48,59 @@ export async function cycleRoutes(app: FastifyInstance) {
     return detail;
   });
 
-  // Who has / hasn't submitted availability for the current week.
+  // Who has / hasn't submitted availability for the current week. "Submitted" = we have
+  // ANY info for them this cycle — a WhatsApp reply (per-shift Availability) OR a manual
+  // config (DayAvailability, incl. "available all day" which writes no per-shift rows).
   app.get('/api/cycle/availability-status', async (req) => {
     const cycle = await getCurrentCycle(req.orgId);
-    const [employees, availability] = await Promise.all([
+    const [employees, availability, dayAvail] = await Promise.all([
       prisma.employee.findMany({ where: { orgId: req.orgId, active: true }, orderBy: { name: 'asc' } }),
       prisma.availability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true } }),
+      prisma.dayAvailability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true } }),
     ]);
-    const responded = new Set(availability.map((a) => a.employeeId));
+    const responded = new Set([...availability, ...dayAvail].map((a) => a.employeeId));
     return {
       cycleId: cycle.id,
       employees: employees.map((e) => ({ id: e.id, name: e.name, responded: responded.has(e.id) })),
+    };
+  });
+
+  // Live control center: who submitted availability (with time) + who hasn't,
+  // plus the issues panel (delivery failures, no phone, opted-out, pending opt-in).
+  app.get('/api/cycle/monitor', async (req) => {
+    const cycle = await getCurrentCycle(req.orgId);
+    const [employees, availability, dayAvail, org] = await Promise.all([
+      prisma.employee.findMany({ where: { orgId: req.orgId, active: true }, orderBy: { name: 'asc' } }),
+      prisma.availability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true, createdAt: true } }),
+      prisma.dayAvailability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true, createdAt: true } }),
+      getOrgById(req.orgId),
+    ]);
+
+    // submitted = has WhatsApp availability OR a manual config; "at" = latest of either.
+    const lastByEmp = new Map<string, Date>();
+    for (const a of [...availability, ...dayAvail]) {
+      const cur = lastByEmp.get(a.employeeId);
+      if (!cur || a.createdAt > cur) lastByEmp.set(a.employeeId, a.createdAt);
+    }
+    const submitted = employees.filter((e) => lastByEmp.has(e.id)).map((e) => ({ id: e.id, name: e.name, at: lastByEmp.get(e.id) }));
+    const pending = employees.filter((e) => !lastByEmp.has(e.id)).map((e) => ({ id: e.id, name: e.name }));
+
+    const nameById = new Map(employees.map((e) => [e.id, e.name]));
+    const failedMsgs = employees.length
+      ? await prisma.outboxMessage.findMany({ where: { employeeId: { in: employees.map((e) => e.id) }, failed: true }, orderBy: { createdAt: 'desc' }, take: 50 })
+      : [];
+    const deliveryFailures = failedMsgs.map((m) => ({ employeeId: m.employeeId, name: nameById.get(m.employeeId) ?? '—', kind: m.kind, at: m.createdAt, detail: m.body.slice(0, 160) }));
+    const noPhone = employees.filter((e) => !e.phone || e.phone.trim().length < 5).map((e) => ({ id: e.id, name: e.name }));
+    const optedOut = employees.filter((e) => e.optInStatus === 'opted_out').map((e) => ({ id: e.id, name: e.name }));
+    const pendingOptIn = employees.filter((e) => e.optInStatus === 'pending').map((e) => ({ id: e.id, name: e.name }));
+
+    return {
+      cycleId: cycle.id,
+      weekStartDate: cycle.weekStartDate,
+      status: cycle.status,
+      whatsappEnabled: org.whatsappEnabled,
+      availability: { total: employees.length, submittedCount: submitted.length, submitted, pending },
+      issues: { nonResponders: pending, deliveryFailures, noPhone, optedOut, pendingOptIn },
     };
   });
 
@@ -66,11 +108,13 @@ export async function cycleRoutes(app: FastifyInstance) {
   app.post('/api/cycle/send-availability', async (req) => {
     const org = await getOrgById(req.orgId);
     const cycle = await getCurrentCycle(req.orgId);
-    const [employees, availability] = await Promise.all([
+    const [employees, availability, dayAvail] = await Promise.all([
       prisma.employee.findMany({ where: { orgId: req.orgId, active: true } }),
       prisma.availability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true } }),
+      prisma.dayAvailability.findMany({ where: { cycleId: cycle.id }, select: { employeeId: true } }),
     ]);
-    const responded = new Set(availability.map((a) => a.employeeId));
+    // don't nag anyone we already have info for — WhatsApp reply OR manual config
+    const responded = new Set([...availability, ...dayAvail].map((a) => a.employeeId));
     const targets = employees.filter((e) => !responded.has(e.id));
     for (const e of targets) {
       const body = org.autoMessage.replace(/\{שם\}/g, e.name);

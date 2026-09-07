@@ -2,24 +2,27 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma, getOrgById } from '../db';
 
-const HHMM = z.string().regex(/^\d{2}:\d{2}$/, 'שעה בפורמט HH:MM');
+// Valid 24h clock time — rejects impossible values like 99:99 or 25:00 that a
+// loose \d{2}:\d{2} would accept and that would corrupt the scheduling math.
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'שעה בפורמט HH:MM (00:00–23:59)');
 
 export async function configRoutes(app: FastifyInstance) {
   // Full config bundle for the Settings screen.
   app.get('/api/config', async (req) => {
     const org = await getOrgById(req.orgId);
-    const [roles, shifts] = await Promise.all([
+    const [roles, shifts, activeEmployees] = await Promise.all([
       prisma.role.findMany({ where: { orgId: org.id } }),
       prisma.shift.findMany({
         where: { orgId: org.id },
         orderBy: [{ dayIndex: 'asc' }, { order: 'asc' }],
         include: { slots: true },
       }),
+      prisma.employee.count({ where: { orgId: org.id, active: true } }),
     ]);
     return {
-      org: { id: org.id, name: org.name, timezone: org.timezone },
+      org: { id: org.id, name: org.name, timezone: org.timezone, businessType: org.businessType, employeeQuota: org.employeeQuota, activeEmployees },
       laborRules: JSON.parse(org.laborRules),
-      automation: { autoMessage: org.autoMessage, autoSendDay: org.autoSendDay, autoSendTime: org.autoSendTime },
+      automation: { autoMessage: org.autoMessage, autoSendDay: org.autoSendDay, autoSendTime: org.autoSendTime, welcomeEnabled: org.welcomeEnabled, welcomeMessage: org.welcomeMessage, autoSendEnabled: org.autoSendEnabled },
       roles,
       shifts,
     };
@@ -63,6 +66,9 @@ export async function configRoutes(app: FastifyInstance) {
     autoMessage: z.string().min(1).max(500),
     autoSendDay: z.number().int().min(0).max(6),
     autoSendTime: HHMM,
+    welcomeEnabled: z.boolean(),
+    welcomeMessage: z.string().min(1).max(500),
+    autoSendEnabled: z.boolean(),
   });
 
   app.put('/api/config/automation', async (req, reply) => {
@@ -132,19 +138,83 @@ export async function configRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // reorder a day's shifts (drag & drop) — persist the new visual order
+  const reorderSchema = z.object({ dayIndex: z.number().int().min(0).max(6), orderedIds: z.array(z.string()).max(50) });
+  app.put('/api/config/reorder-shifts', async (req, reply) => {
+    const parsed = reorderSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'נתונים לא תקינים' });
+    const { orderedIds } = parsed.data;
+    const owned = await prisma.shift.findMany({ where: { id: { in: orderedIds }, orgId: req.orgId }, select: { id: true } });
+    if (owned.length !== orderedIds.length) return reply.code(404).send({ error: 'משמרת לא נמצאה' });
+    await prisma.$transaction(orderedIds.map((id, i) => prisma.shift.update({ where: { id }, data: { order: i } })));
+    return { ok: true };
+  });
+
   // ---- shift slots (role requirements inside a shift) ----
-  const slotSchema = z.object({ roleId: z.string(), startTime: HHMM, count: z.number().int().min(0).max(50) });
+  const slotSchema = z.object({ roleId: z.string(), startTime: HHMM, count: z.number().int().min(0).max(50), minLevel: z.number().int().min(1).max(5).optional() });
+
+  // 2.5 — recurring/bulk demand: set a role requirement across many shifts at once
+  // ("every morning needs 2 waiters"). Filters by weekday and/or shift label; each
+  // matching shift gets the role at its own start time. count=0 removes the requirement.
+  const bulkSchema = z.object({
+    roleId: z.string(),
+    count: z.number().int().min(0).max(50),
+    dayIndexes: z.array(z.number().int().min(0).max(6)).optional(),
+    label: z.string().max(40).optional(),
+  });
+  app.post('/api/config/slots/bulk', async (req, reply) => {
+    const parsed = bulkSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { roleId, count, dayIndexes, label } = parsed.data;
+    const role = await prisma.role.findUnique({ where: { id: roleId } });
+    if (!role || role.orgId !== req.orgId) return reply.code(404).send({ error: 'תפקיד לא נמצא' });
+
+    const shifts = await prisma.shift.findMany({
+      where: {
+        orgId: req.orgId,
+        ...(dayIndexes && dayIndexes.length ? { dayIndex: { in: dayIndexes } } : {}),
+        ...(label ? { label } : {}),
+      },
+      include: { slots: true },
+    });
+
+    let created = 0;
+    let updated = 0;
+    let removed = 0;
+    for (const s of shifts) {
+      const existing = s.slots.find((sl) => sl.roleId === roleId && sl.startTime === s.startTime);
+      if (count === 0) {
+        if (existing) { await prisma.shiftSlot.delete({ where: { id: existing.id } }); removed++; }
+      } else if (existing) {
+        if (existing.count !== count) { await prisma.shiftSlot.update({ where: { id: existing.id }, data: { count } }); updated++; }
+      } else {
+        await prisma.shiftSlot.create({ data: { shiftId: s.id, roleId, startTime: s.startTime, count } });
+        created++;
+      }
+    }
+    return { created, updated, removed, shiftsMatched: shifts.length };
+  });
 
   async function ownShift(orgId: string, shiftId: string) {
     const s = await prisma.shift.findUnique({ where: { id: shiftId } });
     return s && s.orgId === orgId ? s : null;
   }
 
+  // the referenced role must belong to this org — otherwise a manager could attach
+  // another business's role to their own slot (cross-tenant reference) or hit a raw
+  // FK-violation 500 with a stale/garbage roleId.
+  const roleInOrg = async (orgId: string, roleId?: string) => {
+    if (!roleId) return true;
+    const r = await prisma.role.findUnique({ where: { id: roleId } });
+    return !!r && r.orgId === orgId;
+  };
+
   app.post('/api/config/shifts/:id/slots', async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!(await ownShift(req.orgId, id))) return reply.code(404).send({ error: 'משמרת לא נמצאה' });
     const parsed = slotSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await roleInOrg(req.orgId, parsed.data.roleId))) return reply.code(400).send({ error: 'תפקיד לא נמצא' });
     return reply.code(201).send(await prisma.shiftSlot.create({ data: { shiftId: id, ...parsed.data } }));
   });
 
@@ -154,6 +224,7 @@ export async function configRoutes(app: FastifyInstance) {
     if (!slot || slot.shift.orgId !== req.orgId) return reply.code(404).send({ error: 'דרישה לא נמצאה' });
     const parsed = slotSchema.partial().safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await roleInOrg(req.orgId, parsed.data.roleId))) return reply.code(400).send({ error: 'תפקיד לא נמצא' });
     return prisma.shiftSlot.update({ where: { id }, data: parsed.data });
   });
 

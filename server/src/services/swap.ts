@@ -23,6 +23,7 @@ function slotOf(a: AssignmentWithRefs): Slot {
     roleId: a.roleId,
     startTime: a.startTime,
     endTime: a.shift.endTime,
+    minLevel: a.slot.minLevel,
   };
 }
 
@@ -70,6 +71,8 @@ export async function eligibleForAssignment(assignment: AssignmentWithRefs): Pro
       id: e.id,
       name: e.name,
       roleIds: e.roles.map((r) => r.roleId),
+      roleLevels: Object.fromEntries(e.roles.map((r) => [r.roleId, r.level])),
+      maxConsecutiveDays: e.maxConsecutiveDays,
       minShifts: e.minShifts,
       maxShifts: e.maxShifts,
       isMinor: e.isMinor,
